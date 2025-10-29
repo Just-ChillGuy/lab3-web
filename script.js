@@ -40,6 +40,7 @@ let history = [];
 let gameOver = false;
 let leaderSaved = false;
 
+let isAnimating = false; // блокировка хода во время анимации
 
 /* ---------- helpers ---------- */
 function safeEl(el) { return !!el; }
@@ -248,36 +249,55 @@ function moveDownInternal(){
   return { moved, gainedTotal };
 }
 
-function performMove(direction){
+async function performMove(direction){
   if(gameOver) return;
+  if(isAnimating) return; // блокируем повторные ходы во время анимации
+
   // сохраним предыдущее состояние для анимации
   prevBoard = deepCopyBoard(board);
 
   try { history.push({ board: deepCopyBoard(board), score }); } catch(e){}
   if(history.length > 100) history.shift();
+
   let res;
   if(direction === 'left') res = moveLeftInternal();
   else if(direction === 'right') res = moveRightInternal();
   else if(direction === 'up') res = moveUpInternal();
   else if(direction === 'down') res = moveDownInternal();
   else return;
+
   if(!res.moved){
     history.pop();
     return;
   }
+
   const gainedThisMove = (res.gainedTotal || 0);
   score += gainedThisMove;
+
   const toAdd = NEW_MIN + Math.floor(Math.random()*(NEW_MAX-NEW_MIN+1));
   addRandomTiles(toAdd);
+
   if(score > bestScore){
     bestScore = score;
     try { localStorage.setItem('bestScore', String(bestScore)); } catch(e){}
   }
   saveGameStateToStorage();
 
-  // animate movement from prevBoard -> board; final render вызовется по завершении анимации
-  animateMove(prevBoard, deepCopyBoard(board));
+  // блокируем ходы и ждём анимации
+  isAnimating = true;
+  try {
+    await animateMove(prevBoard, deepCopyBoard(board));
+  } catch(e){
+    // в случае ошибки — просто сделаем финальный рендер
+    render();
+  } finally {
+    isAnimating = false;
+  }
+
+  // после финальной отрисовки проверяем game over
+  checkGameOverCondition();
 }
+
 /* ---------- anim helpers: вычисление позиций ячеек ---------- */
 function getCellRects(){
   // возвращает map 'r,c' => DOMRect (относительно документа)
@@ -385,20 +405,28 @@ function animateMove(prev, next){
 
   // helper to create tile element at absolute position (relative to boardWrap)
   function createFloatTile(val, fromRect){
-    const el = document.createElement('div');
-    el.className = `tile float tile-${val}`;
-    el.textContent = String(val);
-    // position relative to boardWrap
-    const left = fromRect.left - wrapRect.left;
-    const top = fromRect.top - wrapRect.top;
-    el.style.width = `${fromRect.width}px`;
-    el.style.height = `${fromRect.height}px`;
-    el.style.left = `${left}px`;
-    el.style.top = `${top}px`;
-    el.style.lineHeight = `${fromRect.height}px`;
-    boardWrap.appendChild(el);
-    return el;
-  }
+  const el = document.createElement('div');
+  // класс: tile + float + конкретный value класс
+  el.className = `tile float tile-${val}`;
+  el.textContent = String(val);
+
+  // position relative to boardWrap
+  const left = fromRect.left - wrapRect.left;
+  const top = fromRect.top - wrapRect.top;
+  el.style.position = 'absolute';
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+  el.style.width = `${fromRect.width}px`;
+  el.style.height = `${fromRect.height}px`;
+  el.style.lineHeight = `${fromRect.height}px`;
+  el.style.zIndex = 999;
+  el.style.pointerEvents = 'none';
+  el.style.transform = 'translate(0,0)';
+  el.style.opacity = '1';
+  boardWrap.appendChild(el);
+  return el;
+}
+
 
   // создаём плавающие элементы для всех prevTiles
   for(const pt of prevTiles){
