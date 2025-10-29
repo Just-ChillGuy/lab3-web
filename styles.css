@@ -77,8 +77,7 @@ body{
   animation: none !important;
 }
 
-/* keyframes можно удалить или оставить пустыми */
-@keyframes pop {}
+
 
 
 /* разные цвета для значений */
