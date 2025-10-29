@@ -67,8 +67,8 @@ body{
   justify-content:center;
   border-radius:6px;
   font-weight:700;
-  transition: transform 160ms ease, opacity 120ms ease;
-  will-change: transform, opacity;
+  /* transition: transform 160ms ease, opacity 120ms ease;
+  will-change: transform, opacity; */
   font-size:20px;
 }
 
@@ -126,9 +126,9 @@ body{
   :root{ --tile-size:96px; --gap:14px }
 }
 
-/* визуальная подсказка для перемещения (необязательно) */
+/* /* визуальная подсказка для перемещения (необязательно) */
 .tile.new { transform: scale(0); animation: pop .12s forwards; }
-@keyframes pop { to { transform: scale(1); } }
+@keyframes pop { to { transform: scale(1); } } */
 
 
 
