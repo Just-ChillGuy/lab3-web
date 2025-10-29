@@ -126,9 +126,7 @@ body{
   :root{ --tile-size:96px; --gap:14px }
 }
 
-/* /* визуальная подсказка для перемещения (необязательно) */
-.tile.new { transform: scale(0); animation: pop .12s forwards; }
-@keyframes pop { to { transform: scale(1); } } */
+
 
 
 
