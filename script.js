@@ -88,7 +88,9 @@ function loadBest() {
 /* ---------- Grid DOM ---------- */
 function initGridDOM() {
     if (!safeEl(gridEl)) return;
+    // очистим существующие ячейки
     gridEl.replaceChildren();
+
     for (let r = 0; r < SIZE; r++) {
         for (let c = 0; c < SIZE; c++) {
             const cell = document.createElement('div');
@@ -98,7 +100,22 @@ function initGridDOM() {
             gridEl.appendChild(cell);
         }
     }
+
+    // гарантируем, что grid является позиционированным контейнером для абсолютных плиток
+    if (!gridEl.style.position) gridEl.style.position = gridEl.style.position || 'relative';
+
+    // создаём .tile-container (или очищаем, если уже есть)
+    let container = gridEl.querySelector('.tile-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.className = 'tile-container';
+        // помещаем поверх ячеек (последним — над ними)
+        gridEl.appendChild(container);
+    } else {
+        container.replaceChildren();
+    }
 }
+
 
 /* ---------- Render ---------- */
 function render(passedTiles) {
