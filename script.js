@@ -229,7 +229,15 @@ function performMove(direction) {
     else if (direction === 'down') res = moveDownInternal();
     else return;
 
-    if (!res.moved) { history.pop(); return; }
+    if (!res.moved) {
+        // если ход не привёл к изменению — откатываем историю и всё равно проверяем, не закончилась ли игра
+        history.pop();
+        // проверяем конец игры даже когда ход не сработал (важно для финальной позиции)
+        checkGameOverCondition();
+        return;
+    }
+
+    // успешный ход
     score += res.gainedTotal;
     const toAdd = NEW_MIN + Math.floor(Math.random() * (NEW_MAX - NEW_MIN + 1));
     addRandomTiles(toAdd);
@@ -239,6 +247,8 @@ function performMove(direction) {
     }
     saveGameStateToStorage();
     render();
+
+    // после всех изменений — проверяем конец игры
     checkGameOverCondition();
 }
 
@@ -297,16 +307,31 @@ function autoSaveLeaderIfNeeded() {
 }
 
 function showGameOverOverlay() {
-    if (safeEl(gameOverOverlay)) gameOverOverlay.classList.remove('hidden');
-    if (safeEl(mobileControls)) mobileControls.classList.add('hidden');
+    if (!safeEl(gameOverOverlay)) return;
+    // remove 'hidden' class if present
+    gameOverOverlay.classList.remove('hidden');
+    // ensure visible regardless of CSS variations
+    try {
+        gameOverOverlay.style.display = ''; // allow stylesheet to control it; если inline style был none — сбросим
+    } catch(e){}
+    gameOverOverlay.setAttribute('aria-hidden', 'false');
+
+    if (safeEl(mobileControls)) {
+        mobileControls.classList.add('hidden');
+        mobileControls.setAttribute('aria-hidden', 'true');
+    }
     if (safeEl(gameOverText)) gameOverText.textContent = `Игра окончена. Ваш счёт: ${score}`;
 }
 
 /* Основная проверка конца игры */
 function checkGameOverCondition() {
+    // если уже флаг выставлен — ничего не делаем
     if (gameOver) return;
+
+    // если есть пустые клетки или возможные слияния — игра продолжается
     if (hasMovesAvailable()) return;
 
+    // нет ходов — выставляем флаг и показываем оверлей
     gameOver = true;
     showGameOverOverlay();
 }
