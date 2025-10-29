@@ -97,26 +97,39 @@ function initGridDOM() {
 }
 
 /* ---------- Render ---------- */
-function render() {
-    if (safeEl(scoreEl)) scoreEl.textContent = score;
-    if (safeEl(bestEl)) bestEl.textContent = bestScore;
-    if (!safeEl(gridEl)) return;
+function render(gridTiles) {
+  const container = document.querySelector('.tile-container');
+  // Сброс предыдущих плиток
+  container.innerHTML = '';
 
-    const cells = gridEl.querySelectorAll('.cell');
-    for (const cell of cells) {
-        const r = Number(cell.dataset.r), c = Number(cell.dataset.c);
-        cell.replaceChildren();
-        const val = (board[r] && typeof board[r][c] === 'number') ? board[r][c] : 0;
-        if (val !== 0) {
-            const tile = document.createElement('div');
-            tile.classList.add('tile', `tile-${val}`, 'new');
-            tile.textContent = String(val);
-            setTimeout(() => tile.classList.remove('new'), 160);
-            cell.appendChild(tile);
-        }
+  gridTiles.forEach(tile => {
+    // Создаём элемент плитки
+    let tileEl = document.createElement('div');
+    tileEl.classList.add('tile', `tile-${tile.value}`, `tile-position-${tile.x}-${tile.y}`);
+    // Если плитка только что появилась (новая), добавляем класс для анимации
+    if (tile.isNew) {
+      tileEl.classList.add('tile-new');
     }
-}
+    // Если плитка участвовала в слиянии, добавляем класс для эффекта pop
+    if (tile.merged) {
+      tileEl.classList.add('tile-merged');
+    }
+    // Внутренняя часть плитки с числом
+    let inner = document.createElement('div');
+    inner.classList.add('tile-inner');
+    inner.textContent = tile.value;
+    tileEl.appendChild(inner);
 
+    // Добавляем плитку в контейнер
+    container.appendChild(tileEl);
+
+    // После добавления можно убрать флаги анимации, чтобы повторно не запускать:
+    // Например, после transitionend или через setTimeout (~200ms):
+    tileEl.addEventListener('animationend', () => {
+      tileEl.classList.remove('tile-new', 'tile-merged');
+    });
+  });
+}
 /* ---------- Board helpers ---------- */
 function createEmptyBoard() {
     board = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
