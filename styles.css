@@ -135,30 +135,29 @@ body{
 /* контейнер для плавающих тайлов (будет использоваться автоматически) */
 #board-wrap { position: relative; }
 
-/* плавающие тайлы (создаём динамически в JS) */
+/* плавающие плитки над board */
 .tile.float {
-  position: absolute; /* абсолютное позиционирование в board-wrap */
-  margin: 0;
-  transform: translate(0,0);
-  transition: transform 180ms cubic-bezier(.2,.8,.2,1), opacity 180ms ease;
-  z-index: 20;
+  position: absolute; /* уже выставляем из JS, дублируем для страховки */
+  z-index: 999;
+  pointer-events: none;
+  transition: transform 200ms cubic-bezier(.2,.8,.2,1), opacity 200ms linear;
   will-change: transform, opacity;
 }
 
-/* слияние — короткий всплеск */
-.tile.merge {
-  animation: merge-pop 220ms cubic-bezier(.2,.9,.3,1);
+/* pop для новых плиток */
+.tile.new {
+  transform: scale(0);
+  animation: pop .12s forwards;
 }
-@keyframes merge-pop {
-  0%   { transform: scale(1); }
-  40%  { transform: scale(1.25); }
-  65%  { transform: scale(0.95); }
+@keyframes pop { to { transform: scale(1); } }
+
+/* merge эффект: лёгкий "пульс" */
+.tile.merge {
+  animation: mergeAnim 280ms cubic-bezier(.2,.9,.2,1) forwards;
+}
+@keyframes mergeAnim {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.15); }
   100% { transform: scale(1); }
 }
 
-/* появление новой плитки — pop */
-.tile.new {
-  transform: scale(0);
-  animation: pop .14s forwards;
-}
-@keyframes pop { to { transform: scale(1); } }
