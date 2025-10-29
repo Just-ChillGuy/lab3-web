@@ -4,7 +4,7 @@
    - автосохранение лидера при game over
    - корректное закрытие модалей
    - защита от ошибок null
-   - FIX: шапка (.topbar) поднимается выше overlay для возможности нажать New на ПК
+   - FIX: надёжная обработка кнопок New / Restart (capture + pointerdown)
    ========================= */
 
 const SIZE = 4;
@@ -398,21 +398,42 @@ function attachEvents(){
   }
   // === /FIX ===
 
-  if(safeEl(btnNew)) btnNew.addEventListener('click', ()=> {
-    // закрываем модалки и стартуем новую игру
-    if(safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden');
-    if(safeEl(leaderboardModal)) leaderboardModal.classList.add('hidden');
-    startNewGame(true);
-  });
+  if(safeEl(btnNew)) {
+    // capture click — срабатывает в фазе захвата до overlay
+    btnNew.addEventListener('click', (e) => {
+      // скроем оверлеи и стартуем игру
+      if(safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden');
+      if(safeEl(leaderboardModal)) leaderboardModal.classList.add('hidden');
+      startNewGame(true);
+    }, { capture: true });
+
+    // pointerdown как запасной вариант (мышь/тач)
+    btnNew.addEventListener('pointerdown', (e) => {
+      if(safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden');
+      if(safeEl(leaderboardModal)) leaderboardModal.classList.add('hidden');
+      startNewGame(true);
+    });
+  }
+
   if(safeEl(btnBoard)) btnBoard.addEventListener('click', ()=>{
     updateLeaderboardUI();
     if(safeEl(leaderboardModal)) leaderboardModal.classList.remove('hidden');
     if(safeEl(mobileControls)) mobileControls.classList.add('hidden');
   });
-  if(safeEl(restartOverlayBtn)) restartOverlayBtn.addEventListener('click', ()=>{
-    if(safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden');
-    startNewGame(true);
-  });
+
+  if(safeEl(restartOverlayBtn)) {
+    // обычный click (работал у тебя на мобилке)
+    restartOverlayBtn.addEventListener('click', ()=>{
+      if(safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden');
+      startNewGame(true);
+    });
+    // pointerdown запасной обработчик для ПК/мыши
+    restartOverlayBtn.addEventListener('pointerdown', (e) => {
+      if(safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden');
+      startNewGame(true);
+    });
+  }
+
   if(safeEl(btnCloseLeaders)) btnCloseLeaders.addEventListener('click', ()=> {
     if(safeEl(leaderboardModal)) leaderboardModal.classList.add('hidden');
   });
