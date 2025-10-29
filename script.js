@@ -1,10 +1,10 @@
-/* ========================= Исправленный script.js =========================
-- Валидация состояния из localStorage
-- Автосохранение лидера при game over (с таймером)
-- Возможность сохранить введённое имя (Enter / кнопки)
-- Корректное закрытие модалей
-- Защита от ошибок null
-========================================================================== */
+/* ========================= Исправленный script.js (полная версия) =========================
+- Надёжное создание .tile-container
+- Точное позиционирование плиток (left/top) с учётом gap/padding
+- addRandomTiles возвращает добавленные позиции -> render помечает isNew
+- Движение анимируется только для не-новых плиток и ровно на шаг (cell + gap)
+- Защита от ошибок null, безопасный load/save
+==================================================================================== */
 
 const SIZE = 4;
 const START_MIN = 1;
@@ -62,7 +62,7 @@ const isValidBoard = (obj) => {
 function saveGameStateToStorage() {
     try {
         localStorage.setItem('gameState', JSON.stringify({ board, score, history, bestScore }));
-    } catch (e) {}
+    } catch (e) { /* noop */ }
 }
 
 function loadGameStateFromStorage() {
@@ -102,55 +102,59 @@ function initGridDOM() {
     }
 
     // гарантируем, что grid является позиционированным контейнером для абсолютных плиток
-    if (!gridEl.style.position) gridEl.style.position = gridEl.style.position || 'relative';
+    gridEl.style.position = gridEl.style.position || 'relative';
 
     // создаём .tile-container (или очищаем, если уже есть)
     let container = gridEl.querySelector('.tile-container');
     if (!container) {
         container = document.createElement('div');
         container.className = 'tile-container';
-        // помещаем поверх ячеек (последним — над ними)
-        gridEl.appendChild(container);
+        gridEl.appendChild(container); // в конце — над ячейками
     } else {
         container.replaceChildren();
     }
 }
 
-
 /* ---------- Render ---------- */
-function render(passedTiles) {
+/*
+ render(passedTiles, addedPositions)
+ - passedTiles: optional array of tile objects (if you want custom)
+ - addedPositions: optional array [{r,c}, ...] — позиции, которые были только что добавлены -> помечаются isNew
+*/
+function render(passedTiles, addedPositions = []) {
   const container = document.querySelector('.tile-container');
   if (!container) return;
   const grid = gridEl;
   if (!grid) return;
 
-  // Построим список плиток из board, если passedTiles не переданы
+  // Собираем плитки из board (если passedTiles не переданы)
   const gridTiles = Array.isArray(passedTiles) ? passedTiles : (function buildFromBoard(){
     const arr = [];
     for (let r = 0; r < SIZE; r++) {
       for (let c = 0; c < SIZE; c++) {
         const v = board[r][c];
-        if (v !== 0) arr.push({ value: v, x: c, y: r, isNew: false, merged: false });
+        if (v !== 0) {
+          const isNew = addedPositions.some(p => p.r === r && p.c === c);
+          arr.push({ value: v, x: c, y: r, isNew: !!isNew, merged: false });
+        }
       }
     }
     return arr;
   })();
 
-  // очистка
+  // очистка контейнера
   container.innerHTML = '';
 
-  // читаем реальные размеры из DOM
+  // реальные размеры и шаг
   const gridStyle = getComputedStyle(grid);
-  const gap = parseFloat(gridStyle.getPropertyValue('gap')) || parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 0;
+  // поддержка старых браузеров: `gap` может называться column-gap/row-gap — но большинство современных возвращают gap
+  const gap = parseFloat(gridStyle.getPropertyValue('gap')) || parseFloat(gridStyle.getPropertyValue('column-gap')) || parseFloat(gridStyle.getPropertyValue('row-gap')) || parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 0;
   const padLeft = parseFloat(gridStyle.paddingLeft) || 0;
   const padTop = parseFloat(gridStyle.paddingTop) || 0;
 
-  // сначала ищем реальную клетку — надёжнее, чем делить ширину
   const firstCell = grid.querySelector('.cell');
   const cellWidth = firstCell ? firstCell.getBoundingClientRect().width : (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tile-size')) || 88);
   const cellHeight = firstCell ? firstCell.getBoundingClientRect().height : cellWidth;
-
-  // шаг между позициями — клетка + gap
   const stepX = cellWidth + gap;
   const stepY = cellHeight + gap;
 
@@ -162,7 +166,12 @@ function render(passedTiles) {
     inner.textContent = tile.value;
     tileEl.appendChild(inner);
 
-    // задаём точные left/top с учётом padding и gap
+    // сбросим возможный inset от старого CSS
+    tileEl.style.inset = 'auto';
+    tileEl.style.right = 'auto';
+    tileEl.style.bottom = 'auto';
+
+    // позиционирование: учитываем padding + шаг с gap
     const left = padLeft + tile.x * stepX;
     const top = padTop + tile.y * stepY;
     tileEl.style.position = 'absolute';
@@ -170,20 +179,19 @@ function render(passedTiles) {
     tileEl.style.top = `${top}px`;
     tileEl.style.width = `${cellWidth}px`;
     tileEl.style.height = `${cellHeight}px`;
-    // убеждаемся, что базовый transform равен нулю
     tileEl.style.transform = 'translate(0,0)';
 
     if (tile.isNew) tileEl.classList.add('tile-new');
     if (tile.merged) tileEl.classList.add('tile-merged');
 
-    // если был реальный ход — стартуем со смещения ровно на один шаг (шаг = cell + gap)
+    // Анимация движения: применяем ТОЛЬКО к не-новым и не-слитым плиткам
     if (lastMoveWasMove && lastMoveDir && !tile.isNew && !tile.merged) {
-      if (lastMoveDir === 'left') tileEl.style.transform = `translateX(${stepX}px)`;
+      if (lastMoveDir === 'left')  tileEl.style.transform = `translateX(${stepX}px)`;
       if (lastMoveDir === 'right') tileEl.style.transform = `translateX(${-stepX}px)`;
-      if (lastMoveDir === 'up') tileEl.style.transform = `translateY(${stepY}px)`;
-      if (lastMoveDir === 'down') tileEl.style.transform = `translateY(${-stepY}px)`;
+      if (lastMoveDir === 'up')    tileEl.style.transform = `translateY(${stepY}px)`;
+      if (lastMoveDir === 'down')  tileEl.style.transform = `translateY(${-stepY}px)`;
 
-      // принудительно триггерим анимацию в следующем кадре
+      // триггерим переход в следующем кадре
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           tileEl.style.transform = 'translate(0,0)';
@@ -193,33 +201,39 @@ function render(passedTiles) {
 
     container.appendChild(tileEl);
 
+    // очистка классов после завершения animation (если применялось)
     tileEl.addEventListener('animationend', () => {
       tileEl.classList.remove('tile-new', 'tile-merged');
     });
   });
 
+  // Обновим счёт
   if (safeEl(scoreEl)) scoreEl.textContent = String(score || 0);
   if (safeEl(bestEl)) bestEl.textContent = String(bestScore || 0);
 }
-
 
 /* ---------- Board helpers ---------- */
 function createEmptyBoard() {
     board = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
 }
 
+// Возвращает массив добавленных позиций: [{r,c}, ...]
 function addRandomTiles(count) {
     const empty = [];
     for (let r = 0; r < SIZE; r++)
         for (let c = 0; c < SIZE; c++)
             if (board[r][c] === 0) empty.push({ r, c });
-    if (!empty.length) return;
+    if (!empty.length) return [];
+
     const toAdd = Math.min(count, empty.length);
+    const added = [];
     for (let i = 0; i < toAdd; i++) {
         const idx = Math.floor(Math.random() * empty.length);
         const { r, c } = empty.splice(idx, 1)[0];
         board[r][c] = Math.random() < 0.9 ? 2 : 4;
+        added.push({ r, c });
     }
+    return added;
 }
 
 /* ---------- Move logic ---------- */
@@ -234,11 +248,8 @@ function mergeLine(arr) {
     let gained = 0;
     let mergedOccurred = true;
 
-    // Повторяем: compress -> один проход объединений -> compress, пока есть объединения
     while (mergedOccurred) {
-        // сначала сдвигаем все числа влево (убираем нули)
         arr = compressLine(arr);
-
         mergedOccurred = false;
         for (let i = 0; i < SIZE - 1; i++) {
             if (arr[i] !== 0 && arr[i] === arr[i + 1]) {
@@ -246,17 +257,13 @@ function mergeLine(arr) {
                 arr[i + 1] = 0;
                 gained += arr[i];
                 mergedOccurred = true;
-                // не пропускаем индекс i+1 — мы уже обнулили его, и следующая итерация i+1 просто проигнорирует 0
             }
         }
-        // цикл повторится, если были объединения (после compress новые пары могут образоваться)
     }
 
-    // Финальный сдвиг для аккуратного результата
     arr = compressLine(arr);
     return { line: arr, gained };
 }
-
 
 function arraysEqual(a, b) {
     if (a.length !== b.length) return false;
@@ -334,9 +341,7 @@ function performMove(direction) {
     if (!res.moved) {
         // неудачный ход — откатываем историю
         history.pop();
-        // проверяем конец игры (важно)
         checkGameOverCondition();
-        // сбросим флаг направления — чтобы не анимировать ничего
         lastMoveDir = null;
         lastMoveWasMove = false;
         return;
@@ -345,23 +350,22 @@ function performMove(direction) {
     // успешный ход
     score += res.gainedTotal;
     const toAdd = NEW_MIN + Math.floor(Math.random() * (NEW_MAX - NEW_MIN + 1));
-    addRandomTiles(toAdd);
+    const added = addRandomTiles(toAdd); // получаем массив добавленных позиций
     if (score > bestScore) {
         bestScore = score;
         try { localStorage.setItem('bestScore', String(bestScore)); } catch(e){}
     }
     saveGameStateToStorage();
 
-    // рендер с анимацией направления (render самостоятельно учитывает lastMoveDir)
-    render();
+    // рендер — помечаем добавленные плитки как isNew
+    render(undefined, added);
 
-    // после рендера — проверим конец игры
+    // проверяем конец игры
     checkGameOverCondition();
 
-    // после небольшой паузы можно очистить направление (опционально)
+    // очистим флаги движения через время, чтобы не мешать следующим анимациям
     setTimeout(() => { lastMoveDir = null; lastMoveWasMove = false; }, 300);
 }
-
 
 /* ---------- Keyboard & undo ---------- */
 function onKey(e) {
@@ -380,7 +384,7 @@ function undo() {
     if (!prev) return;
     board = deepCopyBoard(prev.board);
     score = prev.score;
-    render();
+    render(); // normal render, no new tiles
     saveGameStateToStorage();
 }
 
@@ -419,12 +423,8 @@ function autoSaveLeaderIfNeeded() {
 
 function showGameOverOverlay() {
     if (!safeEl(gameOverOverlay)) return;
-    // remove 'hidden' class if present
     gameOverOverlay.classList.remove('hidden');
-    // ensure visible regardless of CSS variations
-    try {
-        gameOverOverlay.style.display = ''; // allow stylesheet to control it; если inline style был none — сбросим
-    } catch(e){}
+    try { gameOverOverlay.style.display = ''; } catch(e){}
     gameOverOverlay.setAttribute('aria-hidden', 'false');
 
     if (safeEl(mobileControls)) {
@@ -434,29 +434,22 @@ function showGameOverOverlay() {
     if (safeEl(gameOverText)) gameOverText.textContent = `Игра окончена. Ваш счёт: ${score}`;
 }
 
-/* Основная проверка конца игры */
 function checkGameOverCondition() {
-    // если уже флаг выставлен — ничего не делаем
     if (gameOver) return;
-
-    // если есть пустые клетки или возможные слияния — игра продолжается
     if (hasMovesAvailable()) return;
-
-    // нет ходов — выставляем флаг и показываем оверлей
     gameOver = true;
     showGameOverOverlay();
 }
 
 /* ---------- Start / New Game ---------- */
 function startNewGame(saveHistory = true) {
-    // если игра была окончена — перед началом новой автосохраняем результат (один раз)
     if (gameOver) autoSaveLeaderIfNeeded();
 
     gameOverOverlay?.classList.add('hidden');
     leaderboardModal?.classList.add('hidden');
     createEmptyBoard();
     const startCount = START_MIN + Math.floor(Math.random() * (START_MAX - START_MIN + 1));
-    addRandomTiles(startCount);
+    const initialAdded = addRandomTiles(startCount);
 
     score = 0;
     history = [];
@@ -466,11 +459,10 @@ function startNewGame(saveHistory = true) {
     if (playerNameInput) playerNameInput.value = '';
     savedMsg?.classList.add('hidden');
 
-    render();
+    render(undefined, initialAdded);
     if (saveHistory) saveGameStateToStorage();
     showMobileControlsIfNeeded();
 }
-
 
 /* ---------- Leaderboard UI ---------- */
 function updateLeaderboardUI() {
@@ -583,21 +575,6 @@ function attachEvents() {
     }
 }
 
-/* ---------- Start / New Game ---------- */
-function startNewGame(saveHistory=true){
-    gameOverOverlay?.classList.add('hidden');
-    leaderboardModal?.classList.add('hidden');
-    createEmptyBoard();
-    const startCount = START_MIN + Math.floor(Math.random()*(START_MAX-START_MIN+1));
-    addRandomTiles(startCount);
-    score = 0; history = []; gameOver = false; leaderSaved = false;
-    if(playerNameInput) playerNameInput.value='';
-    savedMsg?.classList.add('hidden');
-    render();
-    if(saveHistory) saveGameStateToStorage();
-    showMobileControlsIfNeeded();
-}
-
 /* ---------- Boot ---------- */
 function boot(){
     initGridDOM();
@@ -605,8 +582,9 @@ function boot(){
     loadBest();
     showMobileControlsIfNeeded();
     const loaded = loadGameStateFromStorage();
-    if(!loaded || !isValidBoard(board)) startNewGame(true);
-    else {
+    if(!loaded || !isValidBoard(board)) {
+        startNewGame(true);
+    } else {
         render();
         gameOver = !hasMovesAvailable();
         if(gameOver) showGameOverOverlay();
