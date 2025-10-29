@@ -382,11 +382,29 @@ function undo() {
     if (gameOver) return;
     const prev = history.pop();
     if (!prev) return;
+
+    // Восстанавливаем доску и счёт
     board = deepCopyBoard(prev.board);
     score = prev.score;
-    render(); // normal render, no new tiles
+
+    // Пересчитаем лучший счёт: максимум среди текущего и всех очков в истории
+    try {
+        const histScores = history && history.length ? history.map(h => (typeof h.score === 'number' ? h.score : 0)) : [];
+        histScores.push(score);
+        const recomputedBest = histScores.length ? Math.max(...histScores) : score;
+        bestScore = recomputedBest;
+        localStorage.setItem('bestScore', String(bestScore));
+    } catch (e) {
+        // если доступ к localStorage упал — просто установим bestScore в текущий score (защита)
+        bestScore = score;
+    }
+
+    // Обновляем UI и сохраняем состояние
+    render();
+    if (safeEl(bestEl)) bestEl.textContent = String(bestScore);
     saveGameStateToStorage();
 }
+
 
 /* ---------- Game over ---------- */
 function hasMovesAvailable() {
