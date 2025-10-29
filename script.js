@@ -114,8 +114,8 @@ function render(){
       const tile = document.createElement('div');
       tile.classList.add('tile', `tile-${val}`);
       tile.textContent = String(val);
-      tile.classList.add('new');
-      setTimeout(()=> tile.classList.remove('new'), 160);
+      //tile.classList.add('new');
+      //setTimeout(()=> tile.classList.remove('new'), 160);
       cell.appendChild(tile);
     }
   }
