@@ -1,6 +1,8 @@
 /* =========================
    2048 — main script.js
    Все клетки генерируются JS (не используется innerHTML/outerHTML)
+   Исправлено: автосохранение результата при game over,
+   удалена кнопка "Сохранить результат", модалки корректно скрываются.
    ========================= */
 
 /* =========== Конфиг и DOM =========== */
@@ -19,7 +21,7 @@ const btnBoard = document.getElementById('btn-board');
 const gameOverOverlay = document.getElementById('game-over');
 const gameOverText = document.getElementById('game-over-text');
 const playerNameInput = document.getElementById('player-name');
-const saveResultBtn = document.getElementById('save-result');
+// const saveResultBtn = document.getElementById('save-result'); // удалено — автосохранение
 const restartOverlayBtn = document.getElementById('restart-from-overlay');
 const savedMsg = document.getElementById('saved-msg');
 const boardWrap = document.getElementById('board-wrap');
@@ -34,6 +36,7 @@ let score = 0;
 let bestScore = 0;
 let history = []; // стек состояний для undo
 let gameOver = false;
+let leaderSaved = false; // флаг: лидер уже сохранён для текущего завершения игры
 
 /* =========== ИНИЦИАЛИЗАЦИЯ DOM GRID (динамически) =========== */
 /* Создаем SIZE*SIZE пустых .cell в grid (без innerHTML) */
@@ -45,8 +48,6 @@ function initGridDOM(){
       cell.classList.add('cell');
       cell.dataset.r = r;
       cell.dataset.c = c;
-      /* внутри каждой ячейки прикрепим контейнер для плитки (или пустой) */
-      // Но не создаём .tile пока нет числа — создаём динамически в render
       gridEl.appendChild(cell);
     }
   }
@@ -65,7 +66,11 @@ function setBestIfNeeded(){
 }
 function saveGameStateToStorage(){
   const obj = { board, score, history, bestScore };
-  localStorage.setItem('gameState', JSON.stringify(obj));
+  try {
+    localStorage.setItem('gameState', JSON.stringify(obj));
+  } catch(e) {
+    // ignore storage errors
+  }
 }
 function loadGameStateFromStorage(){
   const s = localStorage.getItem('gameState');
@@ -112,6 +117,7 @@ function startNewGame(saveHistory=true){
   score = 0;
   history = [];
   gameOver = false;
+  leaderSaved = false; // сбрасываем флаг при старте новой игры
   playerNameInput.value = '';
   savedMsg.classList.add('hidden');
   setBestIfNeeded(); // если ранее bestScore из localStorage
@@ -132,16 +138,13 @@ function render(){
     const r = Number(cell.dataset.r);
     const c = Number(cell.dataset.c);
     // удаляем старые плитки внутри
-    // используем replaceChildren чтобы не использовать innerHTML
     cell.replaceChildren();
     const val = board[r][c];
     if(val !== 0){
       const tile = document.createElement('div');
       tile.classList.add('tile', `tile-${val}`);
       tile.textContent = String(val);
-      // небольшой "pop" для вновь созданных плиток
       tile.classList.add('new');
-      // через setTimeout удалим класс .new чтобы animation сработал
       setTimeout(()=> tile.classList.remove('new'), 160);
       cell.appendChild(tile);
     }
@@ -149,14 +152,12 @@ function render(){
 }
 
 /* =========== Логика движения и объединения =========== */
-/* Комфортные вспомогательные для сжатия и слияния одномерного массива (длина SIZE) */
 function compressLine(arr){
   const newArr = arr.filter(v => v !== 0);
   while(newArr.length < SIZE) newArr.push(0);
   return newArr;
 }
 function mergeLine(arr){
-  // arr уже сжатый в сторону начала
   let gained = 0;
   for(let i=0;i<SIZE-1;i++){
     if(arr[i]!==0 && arr[i]===arr[i+1]){
@@ -168,7 +169,6 @@ function mergeLine(arr){
   return { line: compressLine(arr), gained };
 }
 
-/* Для унификации: возвращает {moved:boolean,gained:int} */
 function moveLeftInternal(){
   let moved = false;
   let gainedTotal = 0;
@@ -183,7 +183,6 @@ function moveLeftInternal(){
   return { moved, gainedTotal };
 }
 function moveRightInternal(){
-  // зеркалим массивы
   let moved = false, gainedTotal = 0;
   for(let r=0;r<SIZE;r++){
     const old = board[r].slice();
@@ -227,7 +226,6 @@ function moveDownInternal(){
   return { moved, gainedTotal };
 }
 
-/* сравнение массивов одномерных */
 function arraysEqual(a,b){
   if(a.length!==b.length) return false;
   for(let i=0;i<a.length;i++) if(a[i]!==b[i]) return false;
@@ -237,9 +235,8 @@ function arraysEqual(a,b){
 /* выполняем ход (обертка): сохраняем состояние в history, делаем move, добавляем тайлы, обновляем счёт */
 function performMove(direction){
   if(gameOver) return;
-  // сохраняем состояние для undo
   history.push({ board: deepCopyBoard(board), score });
-  if(history.length > 100) history.shift(); // ограничение длины
+  if(history.length > 100) history.shift();
   let res;
   if(direction === 'left') res = moveLeftInternal();
   else if(direction === 'right') res = moveRightInternal();
@@ -247,13 +244,11 @@ function performMove(direction){
   else if(direction === 'down') res = moveDownInternal();
   else return;
   if(res.moved){
-    score += res.gainedTotal || res.gainedTotal === 0 ? res.gainedTotal : res.gained; //兼
+    score += (res.gainedTotal || 0); // упрощено и устойчиво
   } else {
-    // если не было сдвига, откат истории
     history.pop();
     return;
   }
-  // после хода добавляем 1-2 новых плитки
   const toAdd = NEW_MIN + Math.floor(Math.random()*(NEW_MAX-NEW_MIN+1));
   addRandomTiles(toAdd);
   setBestIfNeeded();
@@ -270,8 +265,6 @@ function onKey(e){
     case 'ArrowRight': e.preventDefault(); performMove('right'); break;
     case 'ArrowUp': e.preventDefault(); performMove('up'); break;
     case 'ArrowDown': e.preventDefault(); performMove('down'); break;
-    case 'z': // Ctrl+Z не используем, простое 'z' может быть удобным
-      break;
   }
 }
 
@@ -297,6 +290,13 @@ function hasMovesAvailable(){
   return false;
 }
 
+function autoSaveLeaderIfNeeded(){
+  if(leaderSaved) return;
+  const name = (playerNameInput && playerNameInput.value.trim()) ? playerNameInput.value.trim() : 'Аноним';
+  saveLeader(name);
+  leaderSaved = true;
+}
+
 function checkGameOverCondition(){
   if(!hasMovesAvailable()){
     gameOver = true;
@@ -305,6 +305,9 @@ function checkGameOverCondition(){
     gameOverOverlay.classList.remove('hidden');
     // скрываем мобильные контролы при показе оверлея
     mobileControls.classList.add('hidden');
+
+    // автосохранение результата (выполняется один раз за окончание)
+    autoSaveLeaderIfNeeded();
   }
 }
 
@@ -321,7 +324,9 @@ function saveLeader(name){
   arr.push({ name: name || 'Аноним', score, date: new Date().toLocaleString() });
   arr.sort((a,b) => b.score - a.score);
   if(arr.length>10) arr = arr.slice(0,10);
-  localStorage.setItem('leaders', JSON.stringify(arr));
+  try {
+    localStorage.setItem('leaders', JSON.stringify(arr));
+  } catch(e) {}
   updateLeaderboardUI();
   savedMsg.classList.remove('hidden');
 }
@@ -385,7 +390,6 @@ function onTouchEnd(e){
   const absX = Math.abs(dx), absY = Math.abs(dy);
   if(Math.max(absX, absY) < 20) return; // нечёткий жест
   if(absX > absY){
-    // горизонтальный
     if(dx > 0) performMove('right');
     else performMove('left');
   } else {
@@ -399,7 +403,7 @@ let pointerStartX = null, pointerStartY = null;
 function onPointerDown(e){
   pointerStartX = e.clientX;
   pointerStartY = e.clientY;
-  boardWrap.setPointerCapture(e.pointerId);
+  try { boardWrap.setPointerCapture(e.pointerId); } catch(e){}
 }
 function onPointerUp(e){
   if(pointerStartX === null) return;
@@ -419,7 +423,12 @@ function onPointerUp(e){
 function attachEvents(){
   document.addEventListener('keydown', onKey);
   btnUndo.addEventListener('click', undo);
-  btnNew.addEventListener('click', ()=> { startNewGame(true); });
+  btnNew.addEventListener('click', ()=> {
+    // при нажатии New — закрываем модалки и начинаем новую игру
+    gameOverOverlay.classList.add('hidden');
+    leaderboardModal.classList.add('hidden');
+    startNewGame(true);
+  });
   btnBoard.addEventListener('click', ()=>{
     updateLeaderboardUI();
     leaderboardModal.classList.remove('hidden');
@@ -427,13 +436,7 @@ function attachEvents(){
     mobileControls.classList.add('hidden');
   });
 
-  // overlay actions
-  saveResultBtn.addEventListener('click', ()=>{
-    const name = playerNameInput.value.trim() || 'Аноним';
-    saveLeader(name);
-    // при сохранении оставляем overlay (можно скрыть input)
-    playerNameInput.value = '';
-  });
+  // overlay restart: скрываем overlay и стартуем новую игру
   restartOverlayBtn.addEventListener('click', ()=>{
     gameOverOverlay.classList.add('hidden');
     startNewGame(true);
@@ -457,7 +460,9 @@ function attachEvents(){
 
   // hide overlay clicking outside inner panel
   gameOverOverlay.addEventListener('click', (ev)=>{
-    if(ev.target === gameOverOverlay) gameOverOverlay.classList.add('hidden');
+    if(ev.target === gameOverOverlay) {
+      gameOverOverlay.classList.add('hidden');
+    }
   });
   leaderboardModal.addEventListener('click', (ev)=>{
     if(ev.target === leaderboardModal) leaderboardModal.classList.add('hidden');
@@ -482,6 +487,8 @@ function boot(){
     if(gameOver){
       gameOverText.textContent = `Игра окончена. Ваш счёт: ${score}`;
       gameOverOverlay.classList.remove('hidden');
+      // автосохранить (если ещё не сохранено)
+      autoSaveLeaderIfNeeded();
     }
   }
 }
