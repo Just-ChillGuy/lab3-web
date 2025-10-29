@@ -32,6 +32,10 @@ const btnCloseLeaders = document.getElementById('close-leaders');
 const btnClearLeaders = document.getElementById('clear-leaders');
 
 /* State */
+// анимация движения
+let lastMoveDir = null;
+let lastMoveWasMove = false;
+
 let board = [];
 let score = 0;
 let bestScore = 0;
@@ -97,39 +101,85 @@ function initGridDOM() {
 }
 
 /* ---------- Render ---------- */
-function render(gridTiles) {
+function render(passedTiles) {
   const container = document.querySelector('.tile-container');
-  // Сброс предыдущих плиток
+  if (!container) return;
+
+  // если передали уже готовый список плиток — используем его, иначе строим из board
+  const gridTiles = Array.isArray(passedTiles) ? passedTiles : (function buildFromBoard(){
+    const arr = [];
+    for (let r = 0; r < SIZE; r++) {
+      for (let c = 0; c < SIZE; c++) {
+        const v = board[r][c];
+        if (v !== 0) {
+          arr.push({ value: v, x: c, y: r, isNew: false, merged: false });
+        }
+      }
+    }
+    return arr;
+  })();
+
+  // Сброс предыдущих плиток — но мы не оставляем их для анимации старых DOM-элементов.
   container.innerHTML = '';
+
+  // Размер ячейки (используется для вычисления начальных трансформаций)
+  const gridRect = gridEl ? gridEl.getBoundingClientRect() : { width: 0 };
+  const cellSize = gridRect.width ? (gridRect.width / SIZE) : 100;
 
   gridTiles.forEach(tile => {
     // Создаём элемент плитки
-    let tileEl = document.createElement('div');
-    tileEl.classList.add('tile', `tile-${tile.value}`, `tile-position-${tile.x}-${tile.y}`);
-    // Если плитка только что появилась (новая), добавляем класс для анимации
-    if (tile.isNew) {
-      tileEl.classList.add('tile-new');
-    }
-    // Если плитка участвовала в слиянии, добавляем класс для эффекта pop
-    if (tile.merged) {
-      tileEl.classList.add('tile-merged');
-    }
-    // Внутренняя часть плитки с числом
-    let inner = document.createElement('div');
+    const tileEl = document.createElement('div');
+    tileEl.classList.add('tile', `tile-${tile.value}`);
+    // внутренний текст
+    const inner = document.createElement('div');
     inner.classList.add('tile-inner');
     inner.textContent = tile.value;
     tileEl.appendChild(inner);
 
+    // позиционируем плитку строго по координатам (absolute)
+    tileEl.style.position = 'absolute';
+    tileEl.style.width = `${cellSize}px`;
+    tileEl.style.height = `${cellSize}px`;
+    tileEl.style.left = `${tile.x * cellSize}px`;
+    tileEl.style.top = `${tile.y * cellSize}px`;
+    tileEl.style.transform = 'translate(0,0)';
+
+    // Появление и слияние (как раньше)
+    if (tile.isNew) tileEl.classList.add('tile-new');
+    if (tile.merged) tileEl.classList.add('tile-merged');
+
+    // Движение: если был ход и ход реально изменил доску, делаем плитку стартующей
+    if (lastMoveWasMove && lastMoveDir && !tile.isNew && !tile.merged) {
+      // начальное смещение на одну клетку в направлении, откуда плитка "пришла"
+      const offset = cellSize; // px
+      if (lastMoveDir === 'left') tileEl.style.transform = `translateX(${offset}px)`;
+      if (lastMoveDir === 'right') tileEl.style.transform = `translateX(${-offset}px)`;
+      if (lastMoveDir === 'up') tileEl.style.transform = `translateY(${offset}px)`;
+      if (lastMoveDir === 'down') tileEl.style.transform = `translateY(${-offset}px)`;
+      // даём время DOM вставиться и затем плавно переводим в нулевое смещение
+      // настройка transition осуществляется в CSS, здесь только триггерим переход
+      requestAnimationFrame(() => {
+        // tiny timeout to ensure transition applies in all browsers
+        requestAnimationFrame(() => {
+          tileEl.style.transform = 'translate(0,0)';
+        });
+      });
+    }
+
     // Добавляем плитку в контейнер
     container.appendChild(tileEl);
 
-    // После добавления можно убрать флаги анимации, чтобы повторно не запускать:
-    // Например, после transitionend или через setTimeout (~200ms):
+    // Сбрасываем классы анимации после окончания анимаций (если нужны)
     tileEl.addEventListener('animationend', () => {
       tileEl.classList.remove('tile-new', 'tile-merged');
     });
   });
+
+  // Обновим счёт в DOM (защищаемся от null)
+  if (safeEl(scoreEl)) scoreEl.textContent = String(score || 0);
+  if (safeEl(bestEl)) bestEl.textContent = String(bestScore || 0);
 }
+
 /* ---------- Board helpers ---------- */
 function createEmptyBoard() {
     board = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
@@ -246,6 +296,7 @@ function performMove(direction) {
     if (gameOver) return;
     try { history.push({ board: deepCopyBoard(board), score }); } catch(e){}
     if (history.length > 100) history.shift();
+
     let res;
     if (direction === 'left') res = moveLeftInternal();
     else if (direction === 'right') res = moveRightInternal();
@@ -253,11 +304,18 @@ function performMove(direction) {
     else if (direction === 'down') res = moveDownInternal();
     else return;
 
+    // Устанавливаем направление для анимации — только если ход изменил доску
+    lastMoveDir = direction;
+    lastMoveWasMove = !!res.moved;
+
     if (!res.moved) {
-        // если ход не привёл к изменению — откатываем историю и всё равно проверяем, не закончилась ли игра
+        // неудачный ход — откатываем историю
         history.pop();
-        // проверяем конец игры даже когда ход не сработал (важно для финальной позиции)
+        // проверяем конец игры (важно)
         checkGameOverCondition();
+        // сбросим флаг направления — чтобы не анимировать ничего
+        lastMoveDir = null;
+        lastMoveWasMove = false;
         return;
     }
 
@@ -270,11 +328,17 @@ function performMove(direction) {
         try { localStorage.setItem('bestScore', String(bestScore)); } catch(e){}
     }
     saveGameStateToStorage();
+
+    // рендер с анимацией направления (render самостоятельно учитывает lastMoveDir)
     render();
 
-    // после всех изменений — проверяем конец игры
+    // после рендера — проверим конец игры
     checkGameOverCondition();
+
+    // после небольшой паузы можно очистить направление (опционально)
+    setTimeout(() => { lastMoveDir = null; lastMoveWasMove = false; }, 300);
 }
+
 
 /* ---------- Keyboard & undo ---------- */
 function onKey(e) {
