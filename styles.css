@@ -59,8 +59,8 @@ body{
 }
 
 .tile {
-  position:absolute;
-  inset:0;
+  position:absolute;          /* остаётся, чтобы плитка была поверх ячейки */
+  inset:0;                    /* занимает всю ячейку */
   display:flex;
   align-items:center;
   justify-content:center;
@@ -72,10 +72,6 @@ body{
   will-change: auto !important;  /* отменяем оптимизацию GPU */
 }
 
-.tile.new {
-  transform: none !important;
-  animation: none !important;
-}
 
 
 
