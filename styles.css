@@ -130,34 +130,5 @@ body{
 .tile.new { transform: scale(0); animation: pop .12s forwards; }
 @keyframes pop { to { transform: scale(1); } }
 
-/* ===== movement & merge animations ===== */
 
-/* контейнер для плавающих тайлов (будет использоваться автоматически) */
-#board-wrap { position: relative; }
-
-/* плавающие плитки над board */
-.tile.float {
-  position: absolute; /* уже выставляем из JS, дублируем для страховки */
-  z-index: 999;
-  pointer-events: none;
-  transition: transform 200ms cubic-bezier(.2,.8,.2,1), opacity 200ms linear;
-  will-change: transform, opacity;
-}
-
-/* pop для новых плиток */
-.tile.new {
-  transform: scale(0);
-  animation: pop .12s forwards;
-}
-@keyframes pop { to { transform: scale(1); } }
-
-/* merge эффект: лёгкий "пульс" */
-.tile.merge {
-  animation: mergeAnim 280ms cubic-bezier(.2,.9,.2,1) forwards;
-}
-@keyframes mergeAnim {
-  0% { transform: scale(1); }
-  40% { transform: scale(1.15); }
-  100% { transform: scale(1); }
-}
 
