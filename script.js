@@ -242,7 +242,6 @@ function performMove(direction) {
     }
     saveGameStateToStorage();
     render();
-    setTimeout(checkGameOverCondition, 100);
     checkGameOverCondition();
 }
 
