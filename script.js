@@ -121,81 +121,87 @@ function initGridDOM() {
 function render(passedTiles) {
   const container = document.querySelector('.tile-container');
   if (!container) return;
+  const grid = gridEl;
+  if (!grid) return;
 
-  // если передали уже готовый список плиток — используем его, иначе строим из board
+  // Построим список плиток из board, если passedTiles не переданы
   const gridTiles = Array.isArray(passedTiles) ? passedTiles : (function buildFromBoard(){
     const arr = [];
     for (let r = 0; r < SIZE; r++) {
       for (let c = 0; c < SIZE; c++) {
         const v = board[r][c];
-        if (v !== 0) {
-          arr.push({ value: v, x: c, y: r, isNew: false, merged: false });
-        }
+        if (v !== 0) arr.push({ value: v, x: c, y: r, isNew: false, merged: false });
       }
     }
     return arr;
   })();
 
-  // Сброс предыдущих плиток — но мы не оставляем их для анимации старых DOM-элементов.
+  // очистка
   container.innerHTML = '';
 
-  // Размер ячейки (используется для вычисления начальных трансформаций)
-  const gridRect = gridEl ? gridEl.getBoundingClientRect() : { width: 0 };
-  const cellSize = gridRect.width ? (gridRect.width / SIZE) : 100;
+  // читаем реальные размеры из DOM
+  const gridStyle = getComputedStyle(grid);
+  const gap = parseFloat(gridStyle.getPropertyValue('gap')) || parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 0;
+  const padLeft = parseFloat(gridStyle.paddingLeft) || 0;
+  const padTop = parseFloat(gridStyle.paddingTop) || 0;
+
+  // сначала ищем реальную клетку — надёжнее, чем делить ширину
+  const firstCell = grid.querySelector('.cell');
+  const cellWidth = firstCell ? firstCell.getBoundingClientRect().width : (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tile-size')) || 88);
+  const cellHeight = firstCell ? firstCell.getBoundingClientRect().height : cellWidth;
+
+  // шаг между позициями — клетка + gap
+  const stepX = cellWidth + gap;
+  const stepY = cellHeight + gap;
 
   gridTiles.forEach(tile => {
-    // Создаём элемент плитки
     const tileEl = document.createElement('div');
-    tileEl.classList.add('tile', `tile-${tile.value}`);
-    // внутренний текст
+    tileEl.className = `tile tile-${tile.value}`;
     const inner = document.createElement('div');
-    inner.classList.add('tile-inner');
+    inner.className = 'tile-inner';
     inner.textContent = tile.value;
     tileEl.appendChild(inner);
 
-    // позиционируем плитку строго по координатам (absolute)
+    // задаём точные left/top с учётом padding и gap
+    const left = padLeft + tile.x * stepX;
+    const top = padTop + tile.y * stepY;
     tileEl.style.position = 'absolute';
-    tileEl.style.width = `${cellSize}px`;
-    tileEl.style.height = `${cellSize}px`;
-    tileEl.style.left = `${tile.x * cellSize}px`;
-    tileEl.style.top = `${tile.y * cellSize}px`;
+    tileEl.style.left = `${left}px`;
+    tileEl.style.top = `${top}px`;
+    tileEl.style.width = `${cellWidth}px`;
+    tileEl.style.height = `${cellHeight}px`;
+    // убеждаемся, что базовый transform равен нулю
     tileEl.style.transform = 'translate(0,0)';
 
-    // Появление и слияние (как раньше)
     if (tile.isNew) tileEl.classList.add('tile-new');
     if (tile.merged) tileEl.classList.add('tile-merged');
 
-    // Движение: если был ход и ход реально изменил доску, делаем плитку стартующей
+    // если был реальный ход — стартуем со смещения ровно на один шаг (шаг = cell + gap)
     if (lastMoveWasMove && lastMoveDir && !tile.isNew && !tile.merged) {
-      // начальное смещение на одну клетку в направлении, откуда плитка "пришла"
-      const offset = cellSize; // px
-      if (lastMoveDir === 'left') tileEl.style.transform = `translateX(${offset}px)`;
-      if (lastMoveDir === 'right') tileEl.style.transform = `translateX(${-offset}px)`;
-      if (lastMoveDir === 'up') tileEl.style.transform = `translateY(${offset}px)`;
-      if (lastMoveDir === 'down') tileEl.style.transform = `translateY(${-offset}px)`;
-      // даём время DOM вставиться и затем плавно переводим в нулевое смещение
-      // настройка transition осуществляется в CSS, здесь только триггерим переход
+      if (lastMoveDir === 'left') tileEl.style.transform = `translateX(${stepX}px)`;
+      if (lastMoveDir === 'right') tileEl.style.transform = `translateX(${-stepX}px)`;
+      if (lastMoveDir === 'up') tileEl.style.transform = `translateY(${stepY}px)`;
+      if (lastMoveDir === 'down') tileEl.style.transform = `translateY(${-stepY}px)`;
+
+      // принудительно триггерим анимацию в следующем кадре
       requestAnimationFrame(() => {
-        // tiny timeout to ensure transition applies in all browsers
         requestAnimationFrame(() => {
           tileEl.style.transform = 'translate(0,0)';
         });
       });
     }
 
-    // Добавляем плитку в контейнер
     container.appendChild(tileEl);
 
-    // Сбрасываем классы анимации после окончания анимаций (если нужны)
     tileEl.addEventListener('animationend', () => {
       tileEl.classList.remove('tile-new', 'tile-merged');
     });
   });
 
-  // Обновим счёт в DOM (защищаемся от null)
   if (safeEl(scoreEl)) scoreEl.textContent = String(score || 0);
   if (safeEl(bestEl)) bestEl.textContent = String(bestScore || 0);
 }
+
 
 /* ---------- Board helpers ---------- */
 function createEmptyBoard() {
