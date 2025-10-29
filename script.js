@@ -387,23 +387,29 @@ function undo() {
     board = deepCopyBoard(prev.board);
     score = prev.score;
 
-    // Пересчитаем лучший счёт: максимум среди текущего и всех очков в истории
+    // === Пересчёт лучшего счёта ===
     try {
-        const histScores = history && history.length ? history.map(h => (typeof h.score === 'number' ? h.score : 0)) : [];
-        histScores.push(score);
-        const recomputedBest = histScores.length ? Math.max(...histScores) : score;
-        bestScore = recomputedBest;
-        localStorage.setItem('bestScore', String(bestScore));
+        // собираем все очки: из истории + текущее
+        const allScores = [...(history.map(h => h.score)), score].filter(s => typeof s === 'number');
+        const recomputedBest = allScores.length ? Math.max(...allScores) : score;
+
+        // если текущий bestScore больше, чем recomputed — обновляем и localStorage
+        if (bestScore !== recomputedBest) {
+            bestScore = recomputedBest;
+            try {
+                localStorage.setItem('bestScore', String(bestScore));
+            } catch (e) { /* ignore */ }
+        }
     } catch (e) {
-        // если доступ к localStorage упал — просто установим bestScore в текущий score (защита)
         bestScore = score;
     }
 
-    // Обновляем UI и сохраняем состояние
+    // Обновляем UI и сохраняем
     render();
     if (safeEl(bestEl)) bestEl.textContent = String(bestScore);
     saveGameStateToStorage();
 }
+
 
 
 /* ---------- Game over ---------- */
