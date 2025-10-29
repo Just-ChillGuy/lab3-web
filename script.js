@@ -459,29 +459,19 @@ function startNewGame(saveHistory=true){
 }
 
 /* ---------- Boot ---------- */
-/* ---------- Boot ---------- */
-function boot() {
+function boot(){
     initGridDOM();
-    createEmptyBoard();
     attachEvents();
     loadBest();
     showMobileControlsIfNeeded();
-
     const loaded = loadGameStateFromStorage();
-    if (loaded && isValidBoard(board)) {
+    if(!loaded || !isValidBoard(board)) startNewGame(true);
+    else {
         render();
-        if (!hasMovesAvailable()) {
-            gameOver = true;
-            showGameOverOverlay();
-        }
-    } else {
-        startNewGame(true);
+        gameOver = !hasMovesAvailable();
+        if(gameOver) showGameOverOverlay();
     }
 }
-
-/* ---------- Run ---------- */
-boot();
-
 
 /* ---------- Run ---------- */
 boot();
