@@ -129,3 +129,45 @@ body{
 /* визуальная подсказка для перемещения (необязательно) */
 .tile.new { transform: scale(0); animation: pop .12s forwards; }
 @keyframes pop { to { transform: scale(1); } }
+
+/* Контейнер для плиток перекрывает сетку с ячейками */
+.tile-container {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  z-index: 2;
+}
+/* Базовый стиль плитки: абсолютное позиционирование и плавный transition */
+.tile {
+  position: absolute;
+  width: 100px; height: 100px; /* например, размер клетки */
+  /* плавный переход при изменении transform */
+  transition: transform 0.2s ease-in-out;
+}
+/* Класс позиционирования: смещение по сетке с учётом размера и отступов */
+.tile-position-0-0 { transform: translate(0px, 0px); }
+.tile-position-0-1 { transform: translate(0px, 110px); }
+.tile-position-1-0 { transform: translate(110px, 0px); }
+/* ... и так далее для всех (x,y) ... */
+
+/* Ключевые кадры для появления (scale-in) */
+@keyframes appear {
+  0% { opacity: 0; transform: scale(0); }
+  100% { opacity: 1; transform: scale(1); }
+}
+/* Ключевые кадры для эффекта “pop” (масштабирование) */
+@keyframes pop {
+  0%   { transform: scale(0); }
+  50%  { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+/* Класс для нового тайла: запускает анимацию появления */
+.tile-new .tile-inner {
+  animation: appear 0.2s ease 0.1s backwards;
+}
+/* Класс для слитого тайла: запускает эффект “pop” */
+.tile-merged .tile-inner {
+  z-index: 20;
+  animation: pop 0.2s ease 0.1s backwards;
+}
+
