@@ -1,37 +1,77 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
 <head>
-    <meta charset="UTF-8" />
-    <title>Игра 2048</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>2048</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <header class="topbar">
     <h1>2048</h1>
-    <div class="score">Счет: <span id="score">0</span></div>
-    <div id="game-container">
-        <div id="grid" class="grid"></div>
-        <div id="game-over" class="overlay hidden">
-            <p id="game-over-message"></p>
-            <input id="player-name" placeholder="Ваше имя" />
-            <button id="save-score">Сохранить результат</button>
-            <button id="restart">Начать заново</button>
+    <div class="controls-row">
+      <div class="scorebox">
+        <div>Счёт</div>
+        <div id="score">0</div>
+      </div>
+      <div class="scorebox best">
+        <div>Лучший</div>
+        <div id="best-score">0</div>
+      </div>
+      <div class="buttons">
+        <button id="btn-undo" title="Отменить ход">↶ Undo</button>
+        <button id="btn-new" title="Новая игра">⟳ New</button>
+        <button id="btn-board" title="Таблица лидеров">🏆 Leaders</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <div id="board-wrap">
+      <div id="grid" class="grid" aria-label="Поле 2048" role="application"></div>
+      <!-- overlay при game over -->
+      <div id="game-over" class="overlay hidden" role="dialog" aria-modal="true">
+        <div class="overlay-inner">
+          <p id="game-over-text">Игра окончена</p>
+          <label for="player-name">Введите имя для лидеров:</label>
+          <input id="player-name" type="text" maxlength="20" placeholder="Имя">
+          <div class="overlay-actions">
+            <button id="save-result">Сохранить результат</button>
+            <button id="restart-from-overlay">Начать заново</button>
+          </div>
+          <p id="saved-msg" class="saved-msg hidden">Ваш рекорд сохранён</p>
         </div>
+      </div>
     </div>
-    <!-- Панель управления для мобильных -->
-    <div id="controls" class="controls">
-        <button data-dir="up">↑</button>
-        <button data-dir="left">←</button>
-        <button data-dir="down">↓</button>
-        <button data-dir="right">→</button>
+
+    <!-- мобильные виртуальные кнопки (будут видны только на малых экранах) -->
+    <nav id="mobile-controls" class="mobile-controls hidden" aria-hidden="true">
+      <button data-dir="up" class="m-btn">↑</button>
+      <div class="m-row">
+        <button data-dir="left" class="m-btn">←</button>
+        <button data-dir="down" class="m-btn">↓</button>
+        <button data-dir="right" class="m-btn">→</button>
+      </div>
+    </nav>
+  </main>
+
+  <!-- Модальное окно таблицы лидеров -->
+  <div id="leaderboard-modal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="overlay-inner">
+      <h2>Таблица лидеров (топ-10)</h2>
+      <table class="leaderboard">
+        <thead><tr><th>Место</th><th>Имя</th><th>Очки</th><th>Дата</th></tr></thead>
+        <tbody id="leaderboard-body"></tbody>
+      </table>
+      <div class="overlay-actions">
+        <button id="clear-leaders">Очистить</button>
+        <button id="close-leaders">Закрыть</button>
+      </div>
     </div>
-    <div id="leaderboard" class="overlay hidden">
-        <h2>Таблица лидеров</h2>
-        <table>
-            <thead><tr><th>Имя</th><th>Очки</th><th>Дата</th></tr></thead>
-            <tbody id="leaderboard-body"></tbody>
-        </table>
-        <button id="close-leaderboard">Закрыть</button>
-    </div>
-    <script src="script.js"></script>
+  </div>
+
+  <footer class="foot">Управление: стрелки / свайп / drag. Undo работает до момента game over.</footer>
+
+  <script src="script.js"></script>
 </body>
 </html>
