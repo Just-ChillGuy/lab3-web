@@ -31,8 +31,10 @@ body{
 
 /* Board wrapper */
 #board-wrap{margin-top:12px; position:relative}
-.grid{
-  position: relative; /* <--- важно для абсолютного позиционирования плиток внутри */
+/* CSS: обрезаем всё, что выходит за пределы доски */
+.grid {
+  position: relative;
+  overflow: hidden; /* <- важная правка */
   display:grid;
   grid-template-columns:repeat(4, var(--tile-size));
   grid-template-rows:repeat(4, var(--tile-size));
@@ -42,6 +44,7 @@ body{
   border-radius:10px;
   box-shadow: 0 6px 10px rgba(0,0,0,0.08);
 }
+
 
 
 /* каждая ячейка базовая */
