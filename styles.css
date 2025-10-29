@@ -1,32 +1,131 @@
-body { font-family: Arial, sans-serif; text-align: center; }
-h1 { color: #333; }
-#game-container { display: inline-block; background: #bbada0; padding: 10px; border-radius: 10px; }
-.grid {
-    display: grid;
-    grid-template-columns: repeat(4, 80px);
-    grid-template-rows: repeat(4, 80px);
-    gap: 10px;
+/* ========== БАЗОВЫЕ СТИЛИ ========== */
+:root{
+  --bg:#faf8ef;
+  --board:#bbada0;
+  --cell:#cdc1b4;
+  --text-dark:#776e65;
+  --tile-size:88px; /* базовый, изменяется медиазапросами */
+  --gap:12px;
 }
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  font-family: Inter, "Segoe UI", Roboto, Arial, sans-serif;
+  background:var(--bg);
+  color:var(--text-dark);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:18px;
+}
+
+/* Topbar */
+.topbar{width:100%;max-width:760px}
+.topbar h1{margin:0 0 8px;font-size:28px}
+.controls-row{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.scorebox{background:#eee; padding:8px 12px;border-radius:8px;text-align:center}
+.scorebox > div:last-child{font-weight:700;font-size:18px}
+.buttons button{margin-left:6px;padding:6px 10px;border-radius:6px;border:1px solid #ccc;background:white;cursor:pointer}
+
+/* Board wrapper */
+#board-wrap{margin-top:12px; position:relative}
+.grid{
+  display:grid;
+  grid-template-columns:repeat(4, var(--tile-size));
+  grid-template-rows:repeat(4, var(--tile-size));
+  gap:var(--gap);
+  background:var(--board);
+  padding:var(--gap);
+  border-radius:10px;
+  box-shadow: 0 6px 10px rgba(0,0,0,0.08);
+}
+
+/* каждая ячейка базовая */
 .cell {
-    width: 80px; height: 80px;
-    font-size: 24px; font-weight: bold;
-    display: flex; align-items: center; justify-content: center;
-    background: #cdc1b4; color: #776e65;
-    border-radius: 5px;
-    transition: transform 200ms ease-in-out; 
+  width:var(--tile-size);
+  height:var(--tile-size);
+  background:var(--cell);
+  border-radius:6px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  font-size:20px;
+  color:var(--text-dark);
+  position:relative;
+  overflow:visible;
 }
 
-.tile-2   { background: #eee4da; color: #776e65; }
-.tile-4   { background: #ede0c8; color: #776e65; }
-.tile-8   { background: #f2b179; color: #f9f6f2; }
-.tile-16  { background: #f59563; color: #f9f6f2; }
-.tile-32  { background: #f67c5f; color: #f9f6f2; }
-.tile-64  { background: #f65e3b; color: #f9f6f2; }
-.tile-128 { background: #edcf72; color: #f9f6f2; }
-.tile-256 { background: #edcc61; color: #f9f6f2; }
-.tile-512 { background: #edc850; color: #f9f6f2; }
-.tile-1024{ background: #edc53f; color: #f9f6f2; }
-.tile-2048{ background: #edc22e; color: #f9f6f2; }
+/* плитка с числом как псевдо-вложение (делаем элемент внутри) */
+.tile {
+  position:absolute;
+  inset:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:6px;
+  font-weight:700;
+  transition: transform 160ms ease, opacity 120ms ease;
+  will-change: transform, opacity;
+  font-size:20px;
+}
 
-.overlay { /* стили модалки, скрываем по умолчанию */ }
-.overlay.hidden { display: none; }
+/* разные цвета для значений */
+.tile-2{ background:#eee4da; color:#776e65; }
+.tile-4{ background:#ede0c8; color:#776e65; }
+.tile-8{ background:#f2b179; color:#f9f6f2; }
+.tile-16{ background:#f59563; color:#f9f6f2; font-size:18px; }
+.tile-32{ background:#f67c5f; color:#f9f6f2; font-size:18px; }
+.tile-64{ background:#f65e3b; color:#f9f6f2; }
+.tile-128{ background:#edcf72; color:#f9f6f2; font-size:16px; }
+.tile-256{ background:#edcc61; color:#f9f6f2; font-size:16px; }
+.tile-512{ background:#edc850; color:#f9f6f2; font-size:14px; }
+.tile-1024{ background:#edc53f; color:#f9f6f2; font-size:13px; }
+.tile-2048{ background:#edc22e; color:#f9f6f2; font-size:13px; }
+
+/* overlay (модалки) */
+.overlay{
+  position:fixed;
+  left:0;right:0;top:0;bottom:0;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(0,0,0,0.45);
+  z-index:90;
+}
+.overlay.hidden{display:none}
+.overlay-inner{
+  background:white;padding:18px;border-radius:10px;min-width:280px;max-width:92%;
+  box-shadow:0 8px 20px rgba(0,0,0,0.25)
+}
+.overlay .overlay-actions{display:flex;gap:8px;justify-content:center;margin-top:12px}
+.saved-msg{color:green;margin-top:10px}
+
+/* mobile controls */
+.mobile-controls{
+  position:fixed;left:50%;transform:translateX(-50%);
+  bottom:18px; z-index:50; display:flex;flex-direction:column;gap:8px;align-items:center;
+}
+.mobile-controls .m-row{display:flex;gap:8px}
+.m-btn{width:54px;height:54px;border-radius:10px;border:1px solid #ccc;background:white;font-size:20px}
+
+/* footer */
+.foot{margin-top:20px;color:#666;font-size:13px}
+
+/* адаптив */
+@media (max-width:520px){
+  :root{ --tile-size:64px; --gap:8px }
+  .topbar h1{font-size:20px}
+  .buttons button{padding:6px;border-radius:8px}
+  .scorebox > div:last-child{font-size:16px}
+  .m-btn{width:50px;height:50px}
+}
+
+/* большие экраны */
+@media (min-width:900px){
+  :root{ --tile-size:96px; --gap:14px }
+}
+
+/* визуальная подсказка для перемещения (необязательно) */
+.tile.new { transform: scale(0); animation: pop .12s forwards; }
+@keyframes pop { to { transform: scale(1); } }
