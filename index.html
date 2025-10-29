@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <title>Игра 2048</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <h1>2048</h1>
+    <div class="score">Счет: <span id="score">0</span></div>
+    <div id="game-container">
+        <div id="grid" class="grid"></div>
+        <div id="game-over" class="overlay hidden">
+            <p id="game-over-message"></p>
+            <input id="player-name" placeholder="Ваше имя" />
+            <button id="save-score">Сохранить результат</button>
+            <button id="restart">Начать заново</button>
+        </div>
+    </div>
+    <!-- Панель управления для мобильных -->
+    <div id="controls" class="controls">
+        <button data-dir="up">↑</button>
+        <button data-dir="left">←</button>
+        <button data-dir="down">↓</button>
+        <button data-dir="right">→</button>
+    </div>
+    <div id="leaderboard" class="overlay hidden">
+        <h2>Таблица лидеров</h2>
+        <table>
+            <thead><tr><th>Имя</th><th>Очки</th><th>Дата</th></tr></thead>
+            <tbody id="leaderboard-body"></tbody>
+        </table>
+        <button id="close-leaderboard">Закрыть</button>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
