@@ -1,10 +1,10 @@
 /* =========================
    Исправленный script.js
    - валидация состояния из localStorage
-   - автосохранение лидера при game over
+   - автосохранение лидера при game over (с таймером)
+   - возможность сохранить введённое имя (Enter / кнопки)
    - корректное закрытие модалей
    - защита от ошибок null
-   - FIX: надёжная обработка кнопок New / Restart (capture + pointerdown)
    ========================= */
 
 const SIZE = 4;
@@ -38,6 +38,7 @@ let bestScore = 0;
 let history = [];
 let gameOver = false;
 let leaderSaved = false;
+
 
 /* ---------- helpers ---------- */
 function safeEl(el) { return !!el; }
@@ -220,7 +221,6 @@ function moveDownInternal(){
 /* ---------- perform move ---------- */
 function performMove(direction){
   if(gameOver) return;
-  // сохранение для undo
   try { history.push({ board: deepCopyBoard(board), score }); } catch(e){}
   if(history.length > 100) history.shift();
   let res;
@@ -230,7 +230,7 @@ function performMove(direction){
   else if(direction === 'down') res = moveDownInternal();
   else return;
   if(!res.moved){
-    history.pop(); // откатим сохранение, если ход не произошёл
+    history.pop();
     return;
   }
   score += (res.gainedTotal || 0);
@@ -292,24 +292,30 @@ function saveLeader(name){
   } catch(e){}
 }
 
+/* Save using input value at moment of call; if empty -> 'Аноним' */
 function autoSaveLeaderIfNeeded(){
   if(leaderSaved) return;
-  const name = (playerNameInput && playerNameInput.value && playerNameInput.value.trim()) ? playerNameInput.value.trim() : 'Аноним';
-  saveLeader(name);
+  const name = (playerNameInput && playerNameInput.value) ? playerNameInput.value.trim() : '';
+  saveLeader(name || 'Аноним');
   leaderSaved = true;
+  clearAutoSaveTimer();
 }
 
+
+/* Show overlay and start autosave timer (delay gives user time to type) */
 function showGameOverOverlay(){
   if(safeEl(gameOverOverlay)) gameOverOverlay.classList.remove('hidden');
   if(safeEl(mobileControls)) mobileControls.classList.add('hidden');
   if(safeEl(gameOverText)) gameOverText.textContent = `Игра окончена. Ваш счёт: ${score}`;
+
+  autoSaveLeaderIfNeeded();
 }
 
 function checkGameOverCondition(){
   if(!hasMovesAvailable()){
     gameOver = true;
     showGameOverOverlay();
-    autoSaveLeaderIfNeeded();
+    // убираем немедленное автосохранение — теперь происходит через таймер или при закрытии оверлея
   }
 }
 
@@ -390,17 +396,18 @@ function attachEvents(){
   if(safeEl(document)) document.addEventListener('keydown', onKey);
   if(safeEl(btnUndo)) btnUndo.addEventListener('click', undo);
 
-  // === FIX: поднимаем .topbar выше overlay, чтобы кнопки в шапке были кликабельны при видимом overlay ===
+  // поднимаем .topbar выше overlay, чтобы кнопки в шапке были кликабельны при видимом overlay
   const topbar = document.querySelector('.topbar');
   if(topbar){
     topbar.style.position = 'relative';
     topbar.style.zIndex = '1000';
   }
-  // === /FIX ===
 
   if(safeEl(btnNew)) {
     // capture click — срабатывает в фазе захвата до overlay
     btnNew.addEventListener('click', (e) => {
+      // сначала сохраняем (если overlay открыт и рекорд ещё не сохранён)
+      if(gameOver) autoSaveLeaderIfNeeded();
       // скроем оверлеи и стартуем игру
       if(safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden');
       if(safeEl(leaderboardModal)) leaderboardModal.classList.add('hidden');
@@ -409,6 +416,7 @@ function attachEvents(){
 
     // pointerdown как запасной вариант (мышь/тач)
     btnNew.addEventListener('pointerdown', (e) => {
+      if(gameOver) autoSaveLeaderIfNeeded();
       if(safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden');
       if(safeEl(leaderboardModal)) leaderboardModal.classList.add('hidden');
       startNewGame(true);
@@ -422,13 +430,15 @@ function attachEvents(){
   });
 
   if(safeEl(restartOverlayBtn)) {
-    // обычный click (работал у тебя на мобилке)
+    // обычный click
     restartOverlayBtn.addEventListener('click', ()=>{
+      if(gameOver) autoSaveLeaderIfNeeded();
       if(safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden');
       startNewGame(true);
     });
     // pointerdown запасной обработчик для ПК/мыши
     restartOverlayBtn.addEventListener('pointerdown', (e) => {
+      if(gameOver) autoSaveLeaderIfNeeded();
       if(safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden');
       startNewGame(true);
     });
@@ -457,6 +467,18 @@ function attachEvents(){
   if(safeEl(leaderboardModal)){
     leaderboardModal.addEventListener('click', (ev)=>{
       if(ev.target === leaderboardModal) leaderboardModal.classList.add('hidden');
+    });
+  }
+
+  // Enter в инпуте: сохранить рекорд (если ещё не сохранён) и показать сообщение
+  if(safeEl(playerNameInput)){
+    playerNameInput.addEventListener('keydown', (e) => {
+      if(e.key === 'Enter'){
+        e.preventDefault();
+        autoSaveLeaderIfNeeded();
+        // показать сообщение сохранения (если нужно)
+        if(safeEl(savedMsg)) savedMsg.classList.remove('hidden');
+      }
     });
   }
 }
@@ -491,7 +513,6 @@ function boot(){
   if(!loaded){
     startNewGame(true);
   } else {
-    // если после загрузки board не валидна — стартуем заново (защита)
     if(!isValidBoard(board)){
       startNewGame(true);
       return;
@@ -499,8 +520,9 @@ function boot(){
     render();
     gameOver = !hasMovesAvailable();
     if(gameOver){
+      // показываем overlay, но НЕ сохраняем сразу — ждём имя / Enter / кнопки / таймер
       showGameOverOverlay();
-      autoSaveLeaderIfNeeded();
+      // автосохранение теперь запускается таймером внутри showGameOverOverlay
     }
   }
 }
