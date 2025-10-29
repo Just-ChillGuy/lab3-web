@@ -1,9 +1,8 @@
 /* ========================= Исправленный script.js =========================
-- Валидация состояния из localStorage
-- Автосохранение лидера при game over (с таймером)
-- Возможность сохранить введённое имя (Enter / кнопки)
-- Корректное закрытие модалей
-- Защита от ошибок null
+- Добавлена проверка конца игры (checkGameOverCondition)
+- Таймер автосохранения лидера при game over и очистка таймера при новой игре
+- Защита от ошибок null / безопасные обращения
+- Небольшие улучшения в рендере (data-атрибут для стилей)
 ========================================================================== */
 
 const SIZE = 4;
@@ -11,6 +10,7 @@ const START_MIN = 1;
 const START_MAX = 3;
 const NEW_MIN = 1;
 const NEW_MAX = 2;
+const AUTO_SAVE_DELAY = 1500; // ms перед автосохранением лидера при game over
 
 /* DOM */
 const gridEl = document.getElementById('grid');
@@ -38,6 +38,7 @@ let bestScore = 0;
 let history = [];
 let gameOver = false;
 let leaderSaved = false;
+let autoSaveTimer = null;
 
 /* ---------- Helpers ---------- */
 const safeEl = (el) => !!el;
@@ -58,7 +59,7 @@ const isValidBoard = (obj) => {
 function saveGameStateToStorage() {
     try {
         localStorage.setItem('gameState', JSON.stringify({ board, score, history, bestScore }));
-    } catch (e) {}
+    } catch (e) { /* ignore storage errors */ }
 }
 
 function loadGameStateFromStorage() {
@@ -111,6 +112,8 @@ function render() {
             const tile = document.createElement('div');
             tile.classList.add('tile', `tile-${val}`, 'new');
             tile.textContent = String(val);
+            // добавляем data-value чтобы стили, если используют data-атрибуты, работали
+            tile.dataset.value = String(val);
             setTimeout(() => tile.classList.remove('new'), 160);
             cell.appendChild(tile);
         }
@@ -162,7 +165,7 @@ function mergeLine(arr) {
 }
 
 function arraysEqual(a, b) {
-    if (a.length !== b.length) return false;
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
     return true;
 }
@@ -286,7 +289,7 @@ function saveLeader(name) {
         localStorage.setItem('leaders', JSON.stringify(arr));
         updateLeaderboardUI();
         if (safeEl(savedMsg)) savedMsg.classList.remove('hidden');
-    } catch(e){}
+    } catch(e){ /* ignore */ }
 }
 
 function autoSaveLeaderIfNeeded() {
@@ -300,6 +303,25 @@ function showGameOverOverlay() {
     if (safeEl(gameOverOverlay)) gameOverOverlay.classList.remove('hidden');
     if (safeEl(mobileControls)) mobileControls.classList.add('hidden');
     if (safeEl(gameOverText)) gameOverText.textContent = `Игра окончена. Ваш счёт: ${score}`;
+
+    // запуск отложенного автосохранения (если ещё не сохранено)
+    if (!leaderSaved) {
+        if (autoSaveTimer) clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => {
+            autoSaveLeaderIfNeeded();
+            autoSaveTimer = null;
+        }, AUTO_SAVE_DELAY);
+    }
+}
+
+function checkGameOverCondition() {
+    // если уже в состоянии gameOver — ничего не делаем
+    if (gameOver) return;
+    if (!hasMovesAvailable()) {
+        gameOver = true;
+        showGameOverOverlay();
+        // сразу сохранять лидера не обязательно — showGameOverOverlay уже запускает таймер автосохранения
+    }
 }
 
 /* ---------- Leaderboard UI ---------- */
@@ -310,13 +332,17 @@ function updateLeaderboardUI() {
         const arr = JSON.parse(localStorage.getItem('leaders') || '[]') || [];
         arr.forEach((item, i) => {
             const tr = document.createElement('tr');
-            tr.appendChild(Object.assign(document.createElement('td'), { textContent: String(i+1) }));
-            tr.appendChild(Object.assign(document.createElement('td'), { textContent: item.name }));
-            tr.appendChild(Object.assign(document.createElement('td'), { textContent: String(item.score) }));
-            tr.appendChild(Object.assign(document.createElement('td'), { textContent: item.date }));
+            const td1 = document.createElement('td'); td1.textContent = String(i+1);
+            const td2 = document.createElement('td'); td2.textContent = item.name;
+            const td3 = document.createElement('td'); td3.textContent = String(item.score);
+            const td4 = document.createElement('td'); td4.textContent = item.date;
+            tr.appendChild(td1);
+            tr.appendChild(td2);
+            tr.appendChild(td3);
+            tr.appendChild(td4);
             leaderboardBody.appendChild(tr);
         });
-    } catch(e){}
+    } catch(e){ /* ignore */ }
 }
 
 function clearLeaders() {
@@ -357,7 +383,7 @@ function onTouchEnd(e){
 }
 
 let pointerStartX=null, pointerStartY=null;
-function onPointerDown(e){ pointerStartX=e.clientX; pointerStartY=e.clientY; try{ boardWrap.setPointerCapture(e.pointerId); } catch(e){} }
+function onPointerDown(e){ pointerStartX=e.clientX; pointerStartY=e.clientY; try{ boardWrap.setPointerCapture && boardWrap.setPointerCapture(e.pointerId); } catch(e){} }
 function onPointerUp(e){
     if(pointerStartX===null) return;
     const dx=e.clientX-pointerStartX, dy=e.clientY-pointerStartY;
@@ -376,15 +402,17 @@ function attachEvents() {
     if(topbar){ topbar.style.position='relative'; topbar.style.zIndex='1000'; }
 
     if(safeEl(btnNew)){
-        btnNew.addEventListener('click', e=>{ if(gameOver) autoSaveLeaderIfNeeded(); gameOverOverlay?.classList.add('hidden'); leaderboardModal?.classList.add('hidden'); startNewGame(true); }, {capture:true});
-        btnNew.addEventListener('pointerdown', e=>{ if(gameOver) autoSaveLeaderIfNeeded(); gameOverOverlay?.classList.add('hidden'); leaderboardModal?.classList.add('hidden'); startNewGame(true); });
+        const startFn = () => { if(gameOver) autoSaveLeaderIfNeeded(); if (safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden'); if (safeEl(leaderboardModal)) leaderboardModal.classList.add('hidden'); startNewGame(true); };
+        btnNew.addEventListener('click', startFn, {capture:true});
+        btnNew.addEventListener('pointerdown', startFn);
     }
 
-    if(safeEl(btnBoard)) btnBoard.addEventListener('click', ()=>{ updateLeaderboardUI(); leaderboardModal?.classList.remove('hidden'); mobileControls?.classList.add('hidden'); });
+    if(safeEl(btnBoard)) btnBoard.addEventListener('click', ()=>{ updateLeaderboardUI(); if (safeEl(leaderboardModal)) leaderboardModal.classList.remove('hidden'); if (safeEl(mobileControls)) mobileControls.classList.add('hidden'); });
 
     if(safeEl(restartOverlayBtn)){
-        restartOverlayBtn.addEventListener('click', ()=>{ if(gameOver) autoSaveLeaderIfNeeded(); gameOverOverlay?.classList.add('hidden'); startNewGame(true); });
-        restartOverlayBtn.addEventListener('pointerdown', ()=>{ if(gameOver) autoSaveLeaderIfNeeded(); gameOverOverlay?.classList.add('hidden'); startNewGame(true); });
+        const restartFn = () => { if(gameOver) autoSaveLeaderIfNeeded(); if (safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden'); startNewGame(true); };
+        restartOverlayBtn.addEventListener('click', restartFn);
+        restartOverlayBtn.addEventListener('pointerdown', restartFn);
     }
 
     if(safeEl(btnCloseLeaders)) btnCloseLeaders.addEventListener('click', ()=>leaderboardModal?.classList.add('hidden'));
@@ -409,12 +437,14 @@ function attachEvents() {
     }
 
     if(safeEl(playerNameInput)){
-        playerNameInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); autoSaveLeaderIfNeeded(); savedMsg?.classList.remove('hidden'); }});
+        playerNameInput.addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); autoSaveLeaderIfNeeded(); savedMsg?.classList.remove('hidden'); }}); 
     }
 }
 
 /* ---------- Start / New Game ---------- */
 function startNewGame(saveHistory=true){
+    // очистка таймера автосохранения при новой игре
+    if (autoSaveTimer) { clearTimeout(autoSaveTimer); autoSaveTimer = null; }
     gameOverOverlay?.classList.add('hidden');
     leaderboardModal?.classList.add('hidden');
     createEmptyBoard();
