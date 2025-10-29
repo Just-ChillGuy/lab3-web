@@ -129,3 +129,36 @@ body{
 /* визуальная подсказка для перемещения (необязательно) */
 .tile.new { transform: scale(0); animation: pop .12s forwards; }
 @keyframes pop { to { transform: scale(1); } }
+
+/* ===== movement & merge animations ===== */
+
+/* контейнер для плавающих тайлов (будет использоваться автоматически) */
+#board-wrap { position: relative; }
+
+/* плавающие тайлы (создаём динамически в JS) */
+.tile.float {
+  position: absolute; /* абсолютное позиционирование в board-wrap */
+  margin: 0;
+  transform: translate(0,0);
+  transition: transform 180ms cubic-bezier(.2,.8,.2,1), opacity 180ms ease;
+  z-index: 20;
+  will-change: transform, opacity;
+}
+
+/* слияние — короткий всплеск */
+.tile.merge {
+  animation: merge-pop 220ms cubic-bezier(.2,.9,.3,1);
+}
+@keyframes merge-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.25); }
+  65%  { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+
+/* появление новой плитки — pop */
+.tile.new {
+  transform: scale(0);
+  animation: pop .14s forwards;
+}
+@keyframes pop { to { transform: scale(1); } }
