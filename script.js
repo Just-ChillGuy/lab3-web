@@ -269,8 +269,8 @@ function hasMovesAvailable() {
         for (let c = 0; c < SIZE; c++) {
             const v = board[r][c];
             if (v === 0) return true;
-            if (c+1 < SIZE && board[r][c+1] === v) return true;
-            if (r+1 < SIZE && board[r+1][c] === v) return true;
+            if (c + 1 < SIZE && board[r][c + 1] === v) return true;
+            if (r + 1 < SIZE && board[r + 1][c] === v) return true;
         }
     return false;
 }
@@ -281,12 +281,12 @@ function saveLeader(name) {
         let arr = JSON.parse(raw);
         if (!Array.isArray(arr)) arr = [];
         arr.push({ name: name || 'Аноним', score, date: new Date().toLocaleString() });
-        arr.sort((a,b) => b.score - a.score);
-        if (arr.length > 10) arr = arr.slice(0,10);
+        arr.sort((a, b) => b.score - a.score);
+        if (arr.length > 10) arr = arr.slice(0, 10);
         localStorage.setItem('leaders', JSON.stringify(arr));
         updateLeaderboardUI();
         if (safeEl(savedMsg)) savedMsg.classList.remove('hidden');
-    } catch(e){}
+    } catch (e) {}
 }
 
 function autoSaveLeaderIfNeeded() {
@@ -301,6 +301,40 @@ function showGameOverOverlay() {
     if (safeEl(mobileControls)) mobileControls.classList.add('hidden');
     if (safeEl(gameOverText)) gameOverText.textContent = `Игра окончена. Ваш счёт: ${score}`;
 }
+
+/* Основная проверка конца игры */
+function checkGameOverCondition() {
+    if (gameOver) return;
+    if (hasMovesAvailable()) return;
+
+    gameOver = true;
+    showGameOverOverlay();
+}
+
+/* ---------- Start / New Game ---------- */
+function startNewGame(saveHistory = true) {
+    // если игра была окончена — перед началом новой автосохраняем результат (один раз)
+    if (gameOver) autoSaveLeaderIfNeeded();
+
+    gameOverOverlay?.classList.add('hidden');
+    leaderboardModal?.classList.add('hidden');
+    createEmptyBoard();
+    const startCount = START_MIN + Math.floor(Math.random() * (START_MAX - START_MIN + 1));
+    addRandomTiles(startCount);
+
+    score = 0;
+    history = [];
+    gameOver = false;
+    leaderSaved = false;
+
+    if (playerNameInput) playerNameInput.value = '';
+    savedMsg?.classList.add('hidden');
+
+    render();
+    if (saveHistory) saveGameStateToStorage();
+    showMobileControlsIfNeeded();
+}
+
 
 /* ---------- Leaderboard UI ---------- */
 function updateLeaderboardUI() {
