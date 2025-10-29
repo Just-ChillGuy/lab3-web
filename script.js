@@ -4,6 +4,7 @@
    - автосохранение лидера при game over
    - корректное закрытие модалей
    - защита от ошибок null
+   - FIX: шапка (.topbar) поднимается выше overlay для возможности нажать New на ПК
    ========================= */
 
 const SIZE = 4;
@@ -388,6 +389,15 @@ function onPointerUp(e){
 function attachEvents(){
   if(safeEl(document)) document.addEventListener('keydown', onKey);
   if(safeEl(btnUndo)) btnUndo.addEventListener('click', undo);
+
+  // === FIX: поднимаем .topbar выше overlay, чтобы кнопки в шапке были кликабельны при видимом overlay ===
+  const topbar = document.querySelector('.topbar');
+  if(topbar){
+    topbar.style.position = 'relative';
+    topbar.style.zIndex = '1000';
+  }
+  // === /FIX ===
+
   if(safeEl(btnNew)) btnNew.addEventListener('click', ()=> {
     // закрываем модалки и стартуем новую игру
     if(safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden');
@@ -432,6 +442,10 @@ function attachEvents(){
 
 /* ---------- start / new game ---------- */
 function startNewGame(saveHistory=true){
+  // Принудительно скрываем оверлей (на случай, если он остался поверх)
+  if(safeEl(gameOverOverlay)) gameOverOverlay.classList.add('hidden');
+  if(safeEl(leaderboardModal)) leaderboardModal.classList.add('hidden');
+
   createEmptyBoard();
   const startCount = START_MIN + Math.floor(Math.random()*(START_MAX-START_MIN+1));
   addRandomTiles(startCount);
