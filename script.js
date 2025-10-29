@@ -144,22 +144,33 @@ function compressLine(arr) {
 }
 
 function mergeLine(arr) {
+    // arr — предполагается как массив длины SIZE (вход может содержать нули)
     let gained = 0;
-    while (true) {
-        let mergedThisPass = false;
+    let mergedOccurred = true;
+
+    // Повторяем: compress -> один проход объединений -> compress, пока есть объединения
+    while (mergedOccurred) {
+        // сначала сдвигаем все числа влево (убираем нули)
+        arr = compressLine(arr);
+
+        mergedOccurred = false;
         for (let i = 0; i < SIZE - 1; i++) {
             if (arr[i] !== 0 && arr[i] === arr[i + 1]) {
-                arr[i] *= 2;
+                arr[i] = arr[i] * 2;
                 arr[i + 1] = 0;
                 gained += arr[i];
-                mergedThisPass = true;
+                mergedOccurred = true;
+                // не пропускаем индекс i+1 — мы уже обнулили его, и следующая итерация i+1 просто проигнорирует 0
             }
         }
-        arr = compressLine(arr);
-        if (!mergedThisPass) break;
+        // цикл повторится, если были объединения (после compress новые пары могут образоваться)
     }
+
+    // Финальный сдвиг для аккуратного результата
+    arr = compressLine(arr);
     return { line: arr, gained };
 }
+
 
 function arraysEqual(a, b) {
     if (a.length !== b.length) return false;
