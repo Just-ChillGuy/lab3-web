@@ -298,7 +298,6 @@ function autoSaveLeaderIfNeeded(){
   const name = (playerNameInput && playerNameInput.value) ? playerNameInput.value.trim() : '';
   saveLeader(name || 'Аноним');
   leaderSaved = true;
-  clearAutoSaveTimer();
 }
 
 
@@ -308,7 +307,7 @@ function showGameOverOverlay(){
   if(safeEl(mobileControls)) mobileControls.classList.add('hidden');
   if(safeEl(gameOverText)) gameOverText.textContent = `Игра окончена. Ваш счёт: ${score}`;
 
-  autoSaveLeaderIfNeeded();
+  //autoSaveLeaderIfNeeded();
 }
 
 function checkGameOverCondition(){
