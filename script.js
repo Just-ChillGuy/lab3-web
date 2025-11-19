@@ -1,18 +1,9 @@
-/* ========================= Исправленный script.js (полная версия) =========================
-- Надёжное создание .tile-container
-- Точное позиционирование плиток (left/top) с учётом gap/padding
-- addRandomTiles возвращает добавленные позиции -> render помечает isNew
-- Движение анимируется только для не-новых плиток и ровно на шаг (cell + gap)
-- Защита от ошибок null, безопасный load/save
-==================================================================================== */
-
 const SIZE = 4;
 const START_MIN = 1;
 const START_MAX = 3;
 const NEW_MIN = 1;
 const NEW_MAX = 2;
 
-/* DOM */
 const gridEl = document.getElementById('grid');
 const scoreEl = document.getElementById('score');
 const bestEl = document.getElementById('best-score');
@@ -31,8 +22,6 @@ const leaderboardBody = document.getElementById('leaderboard-body');
 const btnCloseLeaders = document.getElementById('close-leaders');
 const btnClearLeaders = document.getElementById('clear-leaders');
 
-/* State */
-// анимация движения
 let lastMoveDir = null;
 let lastMoveWasMove = false;
 
@@ -43,7 +32,6 @@ let history = [];
 let gameOver = false;
 let leaderSaved = false;
 
-/* ---------- Helpers ---------- */
 const safeEl = (el) => !!el;
 const deepCopyBoard = (b) => b.map(row => row.slice());
 
@@ -58,7 +46,6 @@ const isValidBoard = (obj) => {
     return true;
 };
 
-/* ---------- Storage ---------- */
 function saveGameStateToStorage() {
     try {
         localStorage.setItem('gameState', JSON.stringify({ board, score, history, bestScore }));
@@ -85,10 +72,8 @@ function loadBest() {
     if (safeEl(bestEl)) bestEl.textContent = bestScore;
 }
 
-/* ---------- Grid DOM ---------- */
 function initGridDOM() {
     if (!safeEl(gridEl)) return;
-    // очистим существующие ячейки
     gridEl.replaceChildren();
 
     for (let r = 0; r < SIZE; r++) {
@@ -101,10 +86,9 @@ function initGridDOM() {
         }
     }
 
-    // гарантируем, что grid является позиционированным контейнером для абсолютных плиток
+
     gridEl.style.position = gridEl.style.position || 'relative';
 
-    // создаём .tile-container (или очищаем, если уже есть)
     let container = gridEl.querySelector('.tile-container');
     if (!container) {
         container = document.createElement('div');
@@ -115,19 +99,15 @@ function initGridDOM() {
     }
 }
 
-/* ---------- Render ---------- */
-/*
- render(passedTiles, addedPositions)
- - passedTiles: optional array of tile objects (if you want custom)
- - addedPositions: optional array [{r,c}, ...] — позиции, которые были только что добавлены -> помечаются isNew
-*/
+
+
 function render(passedTiles, addedPositions = []) {
   const container = document.querySelector('.tile-container');
   if (!container) return;
   const grid = gridEl;
   if (!grid) return;
 
-  // Собираем плитки из board (если passedTiles не переданы)
+
   const gridTiles = Array.isArray(passedTiles) ? passedTiles : (function buildFromBoard(){
     const arr = [];
     for (let r = 0; r < SIZE; r++) {
@@ -142,12 +122,12 @@ function render(passedTiles, addedPositions = []) {
     return arr;
   })();
 
-  // очистка контейнера
+
   container.replaceChildren();
 
-  // реальные размеры и шаг
+
   const gridStyle = getComputedStyle(grid);
-  // поддержка старых браузеров: `gap` может называться column-gap/row-gap — но большинство современных возвращают gap
+
   const gap = parseFloat(gridStyle.getPropertyValue('gap')) || parseFloat(gridStyle.getPropertyValue('column-gap')) || parseFloat(gridStyle.getPropertyValue('row-gap')) || parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 0;
   const padLeft = parseFloat(gridStyle.paddingLeft) || 0;
   const padTop = parseFloat(gridStyle.paddingTop) || 0;
@@ -166,12 +146,12 @@ function render(passedTiles, addedPositions = []) {
     inner.textContent = tile.value;
     tileEl.appendChild(inner);
 
-    // сбросим возможный inset от старого CSS
+
     tileEl.style.inset = 'auto';
     tileEl.style.right = 'auto';
     tileEl.style.bottom = 'auto';
 
-    // позиционирование: учитываем padding + шаг с gap
+
     const left = padLeft + tile.x * stepX;
     const top = padTop + tile.y * stepY;
     tileEl.style.position = 'absolute';
@@ -184,14 +164,12 @@ function render(passedTiles, addedPositions = []) {
     if (tile.isNew) tileEl.classList.add('tile-new');
     if (tile.merged) tileEl.classList.add('tile-merged');
 
-    // Анимация движения: применяем ТОЛЬКО к не-новым и не-слитым плиткам
     if (lastMoveWasMove && lastMoveDir && !tile.isNew && !tile.merged) {
       if (lastMoveDir === 'left')  tileEl.style.transform = `translateX(${stepX}px)`;
       if (lastMoveDir === 'right') tileEl.style.transform = `translateX(${-stepX}px)`;
       if (lastMoveDir === 'up')    tileEl.style.transform = `translateY(${stepY}px)`;
       if (lastMoveDir === 'down')  tileEl.style.transform = `translateY(${-stepY}px)`;
 
-      // триггерим переход в следующем кадре
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
           tileEl.style.transform = 'translate(0,0)';
@@ -201,23 +179,19 @@ function render(passedTiles, addedPositions = []) {
 
     container.appendChild(tileEl);
 
-    // очистка классов после завершения animation (если применялось)
     tileEl.addEventListener('animationend', () => {
       tileEl.classList.remove('tile-new', 'tile-merged');
     });
   });
 
-  // Обновим счёт
   if (safeEl(scoreEl)) scoreEl.textContent = String(score || 0);
   if (safeEl(bestEl)) bestEl.textContent = String(bestScore || 0);
 }
 
-/* ---------- Board helpers ---------- */
 function createEmptyBoard() {
     board = Array.from({ length: SIZE }, () => Array(SIZE).fill(0));
 }
 
-// Возвращает массив добавленных позиций: [{r,c}, ...]
 function addRandomTiles(count) {
     const empty = [];
     for (let r = 0; r < SIZE; r++)
@@ -236,7 +210,6 @@ function addRandomTiles(count) {
     return added;
 }
 
-/* ---------- Move logic ---------- */
 function compressLine(arr) {
     const newArr = arr.filter(v => v !== 0);
     while (newArr.length < SIZE) newArr.push(0);
@@ -244,7 +217,7 @@ function compressLine(arr) {
 }
 
 function mergeLine(arr) {
-    // arr — предполагается как массив длины SIZE (вход может содержать нули)
+
     let gained = 0;
     let mergedOccurred = true;
 
@@ -271,7 +244,6 @@ function arraysEqual(a, b) {
     return true;
 }
 
-/* ---------- Internal moves ---------- */
 function moveLeftInternal() {
     let moved = false, gainedTotal = 0;
     for (let r = 0; r < SIZE; r++) {
@@ -321,7 +293,7 @@ function moveDownInternal() {
     return { moved, gainedTotal };
 }
 
-/* ---------- Perform move ---------- */
+
 function performMove(direction) {
     if (gameOver) return;
     try { history.push({ board: deepCopyBoard(board), score }); } catch(e){}
@@ -334,12 +306,11 @@ function performMove(direction) {
     else if (direction === 'down') res = moveDownInternal();
     else return;
 
-    // Устанавливаем направление для анимации — только если ход изменил доску
     lastMoveDir = direction;
     lastMoveWasMove = !!res.moved;
 
     if (!res.moved) {
-        // неудачный ход — откатываем историю
+
         history.pop();
         checkGameOverCondition();
         lastMoveDir = null;
@@ -347,27 +318,22 @@ function performMove(direction) {
         return;
     }
 
-    // успешный ход
     score += res.gainedTotal;
     const toAdd = NEW_MIN + Math.floor(Math.random() * (NEW_MAX - NEW_MIN + 1));
-    const added = addRandomTiles(toAdd); // получаем массив добавленных позиций
+    const added = addRandomTiles(toAdd); 
     if (score > bestScore) {
         bestScore = score;
         try { localStorage.setItem('bestScore', String(bestScore)); } catch(e){}
     }
     saveGameStateToStorage();
 
-    // рендер — помечаем добавленные плитки как isNew
     render(undefined, added);
 
-    // проверяем конец игры
     checkGameOverCondition();
 
-    // очистим флаги движения через время, чтобы не мешать следующим анимациям
     setTimeout(() => { lastMoveDir = null; lastMoveWasMove = false; }, 300);
 }
 
-/* ---------- Keyboard & undo ---------- */
 function onKey(e) {
     if (gameOver) return;
     switch(e.key){
@@ -383,17 +349,14 @@ function undo() {
     const prev = history.pop();
     if (!prev) return;
 
-    // Восстанавливаем доску и счёт
     board = deepCopyBoard(prev.board);
     score = prev.score;
 
-    // === Пересчёт лучшего счёта ===
     try {
-        // собираем все очки: из истории + текущее
+
         const allScores = [...(history.map(h => h.score)), score].filter(s => typeof s === 'number');
         const recomputedBest = allScores.length ? Math.max(...allScores) : score;
 
-        // если текущий bestScore больше, чем recomputed — обновляем и localStorage
         if (bestScore !== recomputedBest) {
             bestScore = recomputedBest;
             try {
@@ -404,7 +367,6 @@ function undo() {
         bestScore = score;
     }
 
-    // Обновляем UI и сохраняем
     render();
     if (safeEl(bestEl)) bestEl.textContent = String(bestScore);
     saveGameStateToStorage();
@@ -412,7 +374,6 @@ function undo() {
 
 
 
-/* ---------- Game over ---------- */
 function hasMovesAvailable() {
     for (let r = 0; r < SIZE; r++)
         for (let c = 0; c < SIZE; c++) {
@@ -465,7 +426,7 @@ function checkGameOverCondition() {
     showGameOverOverlay();
 }
 
-/* ---------- Start / New Game ---------- */
+
 function startNewGame(saveHistory = true) {
     if (gameOver) autoSaveLeaderIfNeeded();
 
@@ -488,7 +449,7 @@ function startNewGame(saveHistory = true) {
     showMobileControlsIfNeeded();
 }
 
-/* ---------- Leaderboard UI ---------- */
+
 function updateLeaderboardUI() {
     if (!safeEl(leaderboardBody)) return;
     leaderboardBody.replaceChildren();
@@ -510,7 +471,7 @@ function clearLeaders() {
     updateLeaderboardUI();
 }
 
-/* ---------- Mobile controls / swipe ---------- */
+
 function showMobileControlsIfNeeded() {
     if (!safeEl(mobileControls)) return;
     const isSmall = window.matchMedia('(max-width:520px)').matches;
@@ -553,7 +514,6 @@ function onPointerUp(e){
     absX>absY ? (dx>0 ? performMove('right') : performMove('left')) : (dy>0 ? performMove('down') : performMove('up'));
 }
 
-/* ---------- Attach events ---------- */
 function attachEvents() {
     if(safeEl(document)) document.addEventListener('keydown', onKey);
     if(safeEl(btnUndo)) btnUndo.addEventListener('click', undo);
@@ -599,7 +559,7 @@ function attachEvents() {
     }
 }
 
-/* ---------- Boot ---------- */
+
 function boot(){
     initGridDOM();
     attachEvents();
@@ -615,5 +575,4 @@ function boot(){
     }
 }
 
-/* ---------- Run ---------- */
 boot();
