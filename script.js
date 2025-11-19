@@ -143,7 +143,7 @@ function render(passedTiles, addedPositions = []) {
   })();
 
   // очистка контейнера
-  container.innerHTML = '';
+  container.replaceChildren();
 
   // реальные размеры и шаг
   const gridStyle = getComputedStyle(grid);
