@@ -7,44 +7,42 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <header class="topbar">
-    <h1>2048</h1>
-    <div class="controls-row">
-      <div class="scorebox">
-        <div>Счёт</div>
-        <div id="score">0</div>
+  <header class="hdr-bar">
+    <h1 class="app-title">2048</h1>
+    <div class="top-controls">
+      <div class="score-bl">
+        <div class="lbl">Счёт</div>
+        <div id="scoreVal" class="val">0</div>
       </div>
-      <div class="scorebox best">
-        <div>Лучший</div>
-        <div id="best-score">0</div>
+      <div class="score-bl best">
+        <div class="lbl">Лучший</div>
+        <div id="bestVal" class="val">0</div>
       </div>
-      <div class="buttons">
-        <button id="btn-undo" title="Отменить ход">Undo</button>
-        <button id="btn-new" title="Новая игра">New</button>
-        <button id="btn-board" title="Таблица лидеров">Leaders</button>
+      <div class="btns">
+        <button id="undoBtn" title="Отменить ход">Undo</button>
+        <button id="newBtn" title="Новая игра">New</button>
+        <button id="leadersBtn" title="Таблица лидеров">Leaders</button>
       </div>
     </div>
   </header>
 
   <main>
-    <div id="board-wrap">
-      <div id="grid" class="grid" aria-label="Поле 2048" role="application"></div>
-      <!-- overlay при game over -->
-      <div id="game-over" class="overlay hidden" role="dialog" aria-modal="true">
-        <div class="overlay-inner">
-          <p id="game-over-text">Игра окончена</p>
-          <label for="player-name">Введите имя для лидеров:</label>
-          <input id="player-name" type="text" maxlength="20" placeholder="Имя">
-          <div class="overlay-actions">
-            <!-- кнопка "Сохранить результат" удалена — автосохранение -->
-            <button id="restart-from-overlay">Начать заново</button>
+    <section id="wrapBoard" class="wrap-board">
+      <div id="boardGrid" class="grid" aria-label="Поле 2048" role="application"></div>
+      <div id="overlayGameOver" class="overlay hidden" role="dialog" aria-modal="true">
+        <div class="box">
+          <p id="gameOverMsg">Игра окончена</p>
+          <label for="nameInput">Введите имя для лидеров:</label>
+          <input id="nameInput" type="text" maxlength="20" placeholder="Имя">
+          <div class="actions">
+            <button id="restartBtn">Начать заново</button>
           </div>
-          <p id="saved-msg" class="saved-msg hidden">Ваш рекорд сохранён</p>
+          <p id="savedNote" class="saved-note hidden">Ваш рекорд сохранён</p>
         </div>
       </div>
-    </div>
+    </section>
 
-    <nav id="mobile-controls" class="mobile-controls hidden" aria-hidden="true">
+    <nav id="mobileNav" class="mobile-controls hidden" aria-hidden="true">
       <button data-dir="up" class="m-btn">↑</button>
       <div class="m-row">
         <button data-dir="left" class="m-btn">←</button>
@@ -54,21 +52,21 @@
     </nav>
   </main>
 
-  <div id="leaderboard-modal" class="overlay hidden" role="dialog" aria-modal="true">
-    <div class="overlay-inner">
+  <div id="leadersModal" class="overlay hidden" role="dialog" aria-modal="true">
+    <div class="box">
       <h2>Таблица лидеров (топ-10)</h2>
       <table class="leaderboard">
         <thead><tr><th>Место</th><th>Имя</th><th>Очки</th><th>Дата</th></tr></thead>
-        <tbody id="leaderboard-body"></tbody>
+        <tbody id="leadersBody"></tbody>
       </table>
-      <div class="overlay-actions">
-        <button id="clear-leaders">Очистить</button>
-        <button id="close-leaders">Закрыть</button>
+      <div class="actions">
+        <button id="clearLeadersBtn">Очистить</button>
+        <button id="closeLeadersBtn">Закрыть</button>
       </div>
     </div>
   </div>
 
-  <footer class="foot">Управление: стрелки / свайп / drag. Undo работает до момента game over.</footer>
+  <footer class="foot">Управление: стрелки / свайп / виртуальные кнопки</footer>
 
   <script src="script.js"></script>
 </body>
