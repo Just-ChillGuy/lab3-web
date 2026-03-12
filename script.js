@@ -1,610 +1,947 @@
-/* ===========================================================
-   Рефакторинг логики 2048 — script.js
-   Изменены имена переменных и функций, структура и комментарии.
-   Сохранены ключевые localStorage-ключи: "gameState", "bestScore", "leaders"
-   =========================================================== */
+'use strict';
 
-/* ====== Конфигурация игры (короткие имена) ====== */
-const N = 4;                    // размер сетки (4x4)
-const S_MIN = 1, S_MAX = 3;     // стартовое кол-во тайлов (1..3)
-const A_MIN = 1, A_MAX = 2;     // добавляемое после хода (1..2)
-const MAX_HISTORY = 100;        // разрешённая длина истории undo
+(function () {
+  function Game() {
+    this.N = 4;
+    this.START_MIN = 1;
+    this.START_MAX = 3;
+    this.ADD_MIN = 1;
+    this.ADD_MAX = 2;
+    this.MAX_H = 100;
 
-/* ====== DOM-элементы (переименованы) ====== */
-const gridNode = document.getElementById('boardGrid');
-const scoreNode = document.getElementById('scoreVal');
-const bestNode = document.getElementById('bestVal');
-const undoBtn = document.getElementById('undoBtn');
-const newBtn = document.getElementById('newBtn');
-const leadersBtn = document.getElementById('leadersBtn');
+    this.gridNode = document.getElementById('boardGrid');
+    this.scoreNode = document.getElementById('scoreVal');
+    this.bestNode = document.getElementById('bestVal');
+    this.undoBtn = document.getElementById('undoBtn');
+    this.newBtn = document.getElementById('newBtn');
+    this.leadersBtn = document.getElementById('leadersBtn');
+    this.overlayGO = document.getElementById('overlayGameOver');
+    this.goMsg = document.getElementById('gameOverMsg');
+    this.nameInput = document.getElementById('nameInput');
+    this.restartBtn = document.getElementById('restartBtn');
+    this.savedNote = document.getElementById('savedNote');
+    this.wrap = document.getElementById('wrapBoard');
+    this.mobileNav = document.getElementById('mobileNav');
+    this.leadersModal = document.getElementById('leadersModal');
+    this.leadersBody = document.getElementById('leadersBody');
+    this.closeLeadersBtn = document.getElementById('closeLeadersBtn');
+    this.clearLeadersBtn = document.getElementById('clearLeadersBtn');
 
-const overlayGO = document.getElementById('overlayGameOver');
-const goMsg = document.getElementById('gameOverMsg');
-const nameInput = document.getElementById('nameInput');
-const restartBtn = document.getElementById('restartBtn');
-const savedNote = document.getElementById('savedNote');
+    this.field = [];
+    this.pts = 0;
+    this.best = 0;
+    this.hist = [];
+    this.over = false;
+    this.leaderSaved = false;
+    this.lastDir = null;
+    this.lastWasMove = false;
 
-const wrap = document.getElementById('wrapBoard');
-const mobileNav = document.getElementById('mobileNav');
+    this.tStartX = 0;
+    this.tStartY = 0;
+    this.pStartX = null;
+    this.pStartY = null;
 
-const leadersModal = document.getElementById('leadersModal');
-const leadersBody = document.getElementById('leadersBody');
-const closeLeadersBtn = document.getElementById('closeLeadersBtn');
-const clearLeadersBtn = document.getElementById('clearLeadersBtn');
+    this._bindMethods();
+  }
 
-/* ====== Состояние игры (новые имена) ====== */
-let field = [];         // матрица N x N с числами (0 = пусто)
-let pts = 0;            // текущие очки
-let best = 0;           // лучший результат
-let hist = [];          // история состояний для undo [{field, pts}, ...]
-let isOver = false;     // флаг game over
-let leaderSaved = false; // флаг, что при завершении лидер уже сохранён
+  Game.prototype._bindMethods = function () {
+    this.onKey = this.onKey.bind(this);
+    this.doMove = this.doMove.bind(this);
+    this.undoAction = this.undoAction.bind(this);
+    this.startNew = this.startNew.bind(this);
+    this.onTouchStart = this.onTouchStart.bind(this);
+    this.onTouchEnd = this.onTouchEnd.bind(this);
+    this.onPointerDown = this.onPointerDown.bind(this);
+    this.onPointerUp = this.onPointerUp.bind(this);
+  };
 
-/* ====== Вспомогательные утилиты ====== */
+  Game.prototype.exists = function (el) {
+    return !!el;
+  };
 
-/** Безопасная проверка наличия DOM-узла */
-const exists = el => !!el;
-
-/** Клонирование поля (глубокое) */
-const cloneField = f => f.map(r => r.slice());
-
-/** Проверка, что board валиден (массив N x N чисел) */
-function validField(obj) {
-  if (!Array.isArray(obj) || obj.length !== N) return false;
-  for (let r = 0; r < N; r++) {
-    if (!Array.isArray(obj[r]) || obj[r].length !== N) return false;
-    for (let c = 0; c < N; c++) {
-      if (typeof obj[r][c] !== 'number' || !Number.isFinite(obj[r][c])) return false;
+  Game.prototype.cloneField = function (f) {
+    var res = [];
+    for (var i = 0; i < f.length; i++) {
+      res.push(f[i].slice());
     }
-  }
-  return true;
-}
+    return res;
+  };
 
-/* ====== Сохранение / загрузка состояния (localStorage) ====== */
-function persistState() {
-  try {
-    localStorage.setItem('gameState', JSON.stringify({ field, pts, hist, best }));
-  } catch (e) { /* ignore storage errors */ }
-}
-
-function loadState() {
-  try {
-    const s = localStorage.getItem('gameState');
-    if (!s) return false;
-    const obj = JSON.parse(s);
-    if (!obj || !validField(obj.field)) return false;
-    field = obj.field;
-    pts = typeof obj.pts === 'number' ? obj.pts : 0;
-    hist = Array.isArray(obj.hist) ? obj.hist : [];
-    best = typeof obj.best === 'number' ? obj.best : Number(localStorage.getItem('bestScore') || 0);
-    return true;
-  } catch (e) { return false; }
-}
-
-function loadBestScore() {
-  const b = Number(localStorage.getItem('bestScore') || '0');
-  best = isNaN(b) ? 0 : b;
-  if (exists(bestNode)) bestNode.textContent = best;
-}
-
-/* ====== Создание DOM-сетки и контейнера плиток ====== */
-function buildGridDOM() {
-  if (!exists(gridNode)) return;
-  gridNode.replaceChildren();
-
-  // создаём пустые ячейки (визуально)
-  for (let r = 0; r < N; r++) {
-    for (let c = 0; c < N; c++) {
-      const cell = document.createElement('div');
-      cell.className = 'cell';
-      cell.dataset.r = r;
-      cell.dataset.c = c;
-      gridNode.appendChild(cell);
+  Game.prototype.validField = function (obj) {
+    if (!Array.isArray(obj) || obj.length !== this.N) {
+      return false;
     }
-  }
-
-  // контейнер для плиток поверх ячеек
-  let tilesWrap = gridNode.querySelector('.tile-container');
-  if (!tilesWrap) {
-    tilesWrap = document.createElement('div');
-    tilesWrap.className = 'tile-container';
-    gridNode.appendChild(tilesWrap);
-  } else {
-    tilesWrap.replaceChildren();
-  }
-}
-
-/* ====== Рендер плиток (позиционирование ABSOLUTE) ====== */
-/*
-  renderTiles(optionalTiles, addedPositions)
-  - optionalTiles: если передать массив плиток, рендерит их (используется редко)
-  - addedPositions: массив {r,c} для пометки новых плиток (анимация)
-*/
-let lastDir = null;
-let lastWasMove = false;
-
-function renderTiles(passed, added = []) {
-  const wrapTiles = document.querySelector('.tile-container');
-  if (!wrapTiles) return;
-
-  // собрать список тайлов из field, если не переданы
-  const tiles = Array.isArray(passed) ? passed : (function collect(){
-    const out = [];
-    for (let r = 0; r < N; r++) {
-      for (let c = 0; c < N; c++) {
-        const v = field[r][c];
-        if (v !== 0) {
-          const isNew = added.some(p => p.r === r && p.c === c);
-          out.push({ v, r, c, isNew, merged: false });
+    for (var r = 0; r < this.N; r++) {
+      if (!Array.isArray(obj[r]) || obj[r].length !== this.N) {
+        return false;
+      }
+      for (var c = 0; c < this.N; c++) {
+        if (typeof obj[r][c] !== 'number' || !Number.isFinite(obj[r][c])) {
+          return false;
         }
       }
     }
-    return out;
-  })();
+    return true;
+  };
 
-  wrapTiles.replaceChildren();
-
-  // размеры ячейки вычисляем по первой .cell (адаптивно)
-  const cell = gridNode.querySelector('.cell');
-  const gStyle = getComputedStyle(gridNode);
-  const gap = parseFloat(gStyle.getPropertyValue('gap')) || parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 0;
-  const padLeft = parseFloat(gStyle.paddingLeft) || 0;
-  const padTop = parseFloat(gStyle.paddingTop) || 0;
-  const w = cell ? cell.getBoundingClientRect().width : (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tile-size')) || 88);
-  const h = cell ? cell.getBoundingClientRect().height : w;
-  const stepX = w + gap;
-  const stepY = h + gap;
-
-  tiles.forEach(t => {
-    const el = document.createElement('div');
-    el.className = `tile tile-${t.v}`;
-    const inner = document.createElement('div');
-    inner.className = 'tile-inner';
-    inner.textContent = t.v;
-    el.appendChild(inner);
-
-    el.style.position = 'absolute';
-    el.style.left = `${padLeft + t.c * stepX}px`;
-    el.style.top = `${padTop + t.r * stepY}px`;
-    el.style.width = `${w}px`;
-    el.style.height = `${h}px`;
-    el.style.transform = 'translate(0,0)';
-
-    if (t.isNew) el.classList.add('tile-new');
-    if (t.merged) el.classList.add('tile-merged');
-
-    // простая анимация смещения при последнем ходе
-    if (lastWasMove && lastDir && !t.isNew && !t.merged) {
-      if (lastDir === 'left')  el.style.transform = `translateX(${stepX}px)`;
-      if (lastDir === 'right') el.style.transform = `translateX(${-stepX}px)`;
-      if (lastDir === 'up')    el.style.transform = `translateY(${stepY}px)`;
-      if (lastDir === 'down')  el.style.transform = `translateY(${-stepY}px)`;
-      requestAnimationFrame(()=>requestAnimationFrame(()=>{ el.style.transform = 'translate(0,0)'; }));
+  Game.prototype.persist = function () {
+    try {
+      var payload = {
+        field: this.field,
+        pts: this.pts,
+        hist: this.hist,
+        best: this.best
+      };
+      localStorage.setItem('gameState', JSON.stringify(payload));
+    } catch (e) {
     }
+  };
 
-    el.addEventListener('animationend', () => {
-      el.classList.remove('tile-new', 'tile-merged');
-    });
+  Game.prototype.load = function () {
+    try {
+      var s = localStorage.getItem('gameState');
+      if (!s) {
+        return false;
+      }
+      var obj = JSON.parse(s);
+      if (!obj || !this.validField(obj.field)) {
+        return false;
+      }
+      this.field = obj.field;
+      this.pts = typeof obj.pts === 'number' ? obj.pts : 0;
+      this.hist = Array.isArray(obj.hist) ? obj.hist : [];
+      var bs = Number(localStorage.getItem('bestScore') || '0');
+      this.best = typeof obj.best === 'number' ? obj.best : (isNaN(bs) ? 0 : bs);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  };
 
-    wrapTiles.appendChild(el);
-  });
+  Game.prototype.loadBest = function () {
+    var b = Number(localStorage.getItem('bestScore') || '0');
+    if (isNaN(b)) {
+      this.best = 0;
+    } else {
+      this.best = b;
+    }
+    if (this.exists(this.bestNode)) {
+      this.bestNode.textContent = this.best;
+    }
+  };
 
-  if (exists(scoreNode)) scoreNode.textContent = String(pts || 0);
-  if (exists(bestNode)) bestNode.textContent = String(best || 0);
-}
-
-/* ====== Игровая логика: создание пустого поля и добавление случайных тайлов ====== */
-function makeEmptyField() {
-  field = Array.from({ length: N }, () => Array(N).fill(0));
-}
-
-function getEmptyCells() {
-  const res = [];
-  for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) if (field[r][c] === 0) res.push({ r, c });
-  return res;
-}
-
-/** Добавить count случайных тайлов (2 или 4) и вернуть список добавленных позиций */
-function addRandom(count) {
-  const empty = getEmptyCells();
-  if (!empty.length) return [];
-  const toAdd = Math.min(count, empty.length);
-  const added = [];
-  for (let i = 0; i < toAdd; i++) {
-    const idx = Math.floor(Math.random() * empty.length);
-    const { r, c } = empty.splice(idx, 1)[0];
-    field[r][c] = Math.random() < 0.9 ? 2 : 4;
-    added.push({ r, c });
-  }
-  return added;
-}
-
-/* ====== Слияние одной строки/столбца (поведение как в вашем коде — несколько проходов,
-         чтобы при [4,4,4,4] конечный результат был [16,0,0,0]) ====== */
-
-/** Сжать ряд влево (удалить нули между числами) */
-function compress(arr) {
-  const a = arr.filter(x => x !== 0);
-  while (a.length < N) a.push(0);
-  return a;
-}
-
-/**
- * mergeArray — делает итеративные слияния пока возможны
- * возвращает {arr: newLine, gained: сумма_очки}
- */
-function mergeArray(line) {
-  let gained = 0;
-  let arr = compress(line);
-  let mergedHappened = true;
-
-  // цикл повторяется, чтобы результат [4,4,4,4] -> [16,0,0,0]
-  while (mergedHappened) {
-    mergedHappened = false;
-    for (let i = 0; i < N - 1; i++) {
-      if (arr[i] !== 0 && arr[i] === arr[i + 1]) {
-        arr[i] = arr[i] * 2;
-        arr[i + 1] = 0;
-        gained += arr[i];
-        mergedHappened = true;
+  Game.prototype.buildGrid = function () {
+    if (!this.exists(this.gridNode)) {
+      return;
+    }
+    while (this.gridNode.firstChild) {
+      this.gridNode.removeChild(this.gridNode.firstChild);
+    }
+    for (var r = 0; r < this.N; r++) {
+      for (var c = 0; c < this.N; c++) {
+        var cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.r = String(r);
+        cell.dataset.c = String(c);
+        this.gridNode.appendChild(cell);
       }
     }
-    if (mergedHappened) arr = compress(arr);
-  }
-  return { arr, gained };
-}
-
-/* ====== Перемещения (внутренние реализации, которые изменяют `field`) ====== */
-function eqArr(a, b) {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
-  return true;
-}
-
-function moveLeftImpl() {
-  let moved = false, gainedTotal = 0;
-  for (let r = 0; r < N; r++) {
-    const old = field[r].slice();
-    const res = mergeArray(old.slice());
-    field[r] = res.arr;
-    if (!eqArr(old, field[r])) moved = true;
-    gainedTotal += res.gained;
-  }
-  return { moved, gainedTotal };
-}
-
-function moveRightImpl() {
-  let moved = false, gainedTotal = 0;
-  for (let r = 0; r < N; r++) {
-    const old = field[r].slice();
-    const rev = old.slice().reverse();
-    const res = mergeArray(rev);
-    field[r] = res.arr.reverse();
-    if (!eqArr(old, field[r])) moved = true;
-    gainedTotal += res.gained;
-  }
-  return { moved, gainedTotal };
-}
-
-function moveUpImpl() {
-  let moved = false, gainedTotal = 0;
-  for (let c = 0; c < N; c++) {
-    const col = field.map(row => row[c]);
-    const res = mergeArray(col);
-    for (let r = 0; r < N; r++) field[r][c] = res.arr[r];
-    if (!eqArr(col, res.arr)) moved = true;
-    gainedTotal += res.gained;
-  }
-  return { moved, gainedTotal };
-}
-
-function moveDownImpl() {
-  let moved = false, gainedTotal = 0;
-  for (let c = 0; c < N; c++) {
-    const col = field.map(row => row[c]);
-    const rev = col.slice().reverse();
-    const res = mergeArray(rev);
-    const final = res.arr.reverse();
-    for (let r = 0; r < N; r++) field[r][c] = final[r];
-    if (!eqArr(col, final)) moved = true;
-    gainedTotal += res.gained;
-  }
-  return { moved, gainedTotal };
-}
-
-/* ====== Выполнение хода (перезапись истории, обновление очков, добавление тайлов, render) ====== */
-function doMove(dir) {
-  if (isOver) return;
-  // сохраняем состояние в историю для undo
-  try { hist.push({ field: cloneField(field), pts }); } catch (e) { /* ignore */ }
-  if (hist.length > MAX_HISTORY) hist.shift();
-
-  let res;
-  if (dir === 'left') res = moveLeftImpl();
-  else if (dir === 'right') res = moveRightImpl();
-  else if (dir === 'up') res = moveUpImpl();
-  else if (dir === 'down') res = moveDownImpl();
-  else return;
-
-  lastDir = dir;
-  lastWasMove = !!res.moved;
-
-  if (!res.moved) {
-    // если ход не изменил поле — откатываем запись в историю
-    hist.pop();
-    checkGameOver();
-    lastDir = null;
-    lastWasMove = false;
-    return;
-  }
-
-  // увеличить очки
-  pts += res.gainedTotal;
-
-  // добавить 1..2 новых плитки
-  const toAdd = A_MIN + Math.floor(Math.random() * (A_MAX - A_MIN + 1));
-  const added = addRandom(toAdd);
-
-  // обновить лучший
-  if (pts > best) {
-    best = pts;
-    try { localStorage.setItem('bestScore', String(best)); } catch (e) {}
-  }
-
-  persistState();
-  renderTiles(undefined, added);
-  checkGameOver();
-
-  setTimeout(() => { lastDir = null; lastWasMove = false; }, 300);
-}
-
-/* ====== Обработка клавиатуры ====== */
-function onKey(e) {
-  if (isOver) return;
-  switch (e.key) {
-    case 'ArrowLeft': e.preventDefault(); doMove('left'); break;
-    case 'ArrowRight': e.preventDefault(); doMove('right'); break;
-    case 'ArrowUp': e.preventDefault(); doMove('up'); break;
-    case 'ArrowDown': e.preventDefault(); doMove('down'); break;
-  }
-}
-
-/* ====== Undo (отмена хода) ====== */
-function undo() {
-  if (isOver) return;
-  const prev = hist.pop();
-  if (!prev) return;
-  field = cloneField(prev.field);
-  pts = prev.pts;
-
-  // пересчёт best: берем максимум из истории и текущего
-  try {
-    const allPts = [...(hist.map(h => h.pts)), pts].filter(x => typeof x === 'number');
-    const recalc = allPts.length ? Math.max(...allPts) : pts;
-    if (best !== recalc) {
-      best = recalc;
-      try { localStorage.setItem('bestScore', String(best)); } catch (e) {}
-    }
-  } catch (e) { best = pts; }
-
-  renderTiles();
-  if (exists(bestNode)) bestNode.textContent = String(best);
-  persistState();
-}
-
-/* ====== Проверка доступных ходов (наличие пустой клетки или одинаковых соседей) ====== */
-function hasMoves() {
-  for (let r = 0; r < N; r++) {
-    for (let c = 0; c < N; c++) {
-      const v = field[r][c];
-      if (v === 0) return true;
-      if (c + 1 < N && field[r][c + 1] === v) return true;
-      if (r + 1 < N && field[r + 1][c] === v) return true;
-    }
-  }
-  return false;
-}
-
-/* ====== Лидерборд (сохранение, автосохранение при game over, UI) ====== */
-function saveLeader(name) {
-  try {
-    const raw = localStorage.getItem('leaders') || '[]';
-    let arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) arr = [];
-    arr.push({ name: name || 'Аноним', score: pts, date: new Date().toLocaleString() });
-    arr.sort((a, b) => b.score - a.score);
-    if (arr.length > 10) arr = arr.slice(0, 10);
-    localStorage.setItem('leaders', JSON.stringify(arr));
-    refreshLeadersUI();
-    if (exists(savedNote)) savedNote.classList.remove('hidden');
-  } catch (e) {}
-}
-
-function autoSaveLeaderIfNeeded() {
-  if (leaderSaved) return;
-  const nm = (nameInput && nameInput.value) ? nameInput.value.trim() : '';
-  saveLeader(nm || 'Аноним');
-  leaderSaved = true;
-}
-
-function refreshLeadersUI() {
-  if (!exists(leadersBody)) return;
-  leadersBody.replaceChildren();
-  try {
-    const arr = JSON.parse(localStorage.getItem('leaders') || '[]') || [];
-    arr.forEach((it, i) => {
-      const tr = document.createElement('tr');
-      tr.appendChild(Object.assign(document.createElement('td'), { textContent: String(i + 1) }));
-      tr.appendChild(Object.assign(document.createElement('td'), { textContent: it.name }));
-      tr.appendChild(Object.assign(document.createElement('td'), { textContent: String(it.score) }));
-      tr.appendChild(Object.assign(document.createElement('td'), { textContent: it.date }));
-      leadersBody.appendChild(tr);
-    });
-  } catch (e) {}
-}
-
-function clearLeaders() {
-  try { localStorage.removeItem('leaders'); } catch (e) {}
-  refreshLeadersUI();
-}
-
-/* ====== Показ / скрытие мобильных контролов (по ширине) ====== */
-function showMobileControlsAdaptive() {
-  if (!exists(mobileNav)) return;
-  const small = window.matchMedia('(max-width:520px)').matches;
-  if (small && !isOver) {
-    mobileNav.classList.remove('hidden');
-    mobileNav.setAttribute('aria-hidden', 'false');
-  } else {
-    mobileNav.classList.add('hidden');
-    mobileNav.setAttribute('aria-hidden', 'true');
-  }
-}
-
-/* ====== Инициализация мобильных кнопок (нажатия) ====== */
-function initMobileBtns() {
-  if (!exists(mobileNav)) return;
-  mobileNav.addEventListener('click', ev => {
-    const btn = ev.target.closest('button[data-dir]');
-    if (!btn) return;
-    doMove(btn.dataset.dir);
-  });
-}
-
-/* ====== Свайпы: touch и pointer ====== */
-let tStartX = 0, tStartY = 0;
-function onTouchStart(e) { const t = e.touches ? e.touches[0] : e; tStartX = t.clientX; tStartY = t.clientY; }
-function onTouchEnd(e) {
-  const t = (e.changedTouches && e.changedTouches[0]) || e;
-  const dx = t.clientX - tStartX, dy = t.clientY - tStartY;
-  const ax = Math.abs(dx), ay = Math.abs(dy);
-  if (Math.max(ax, ay) < 20) return;
-  ax > ay ? (dx > 0 ? doMove('right') : doMove('left')) : (dy > 0 ? doMove('down') : doMove('up'));
-}
-
-let pStartX = null, pStartY = null;
-function onPointerDown(e) { pStartX = e.clientX; pStartY = e.clientY; try { wrap.setPointerCapture(e.pointerId); } catch (e) {} }
-function onPointerUp(e) {
-  if (pStartX === null) return;
-  const dx = e.clientX - pStartX, dy = e.clientY - pStartY;
-  pStartX = pStartY = null;
-  const ax = Math.abs(dx), ay = Math.abs(dy);
-  if (Math.max(ax, ay) < 10) return;
-  ax > ay ? (dx > 0 ? doMove('right') : doMove('left')) : (dy > 0 ? doMove('down') : doMove('up'));
-}
-
-/* ====== Показ overlay game over и проверка состояния ====== */
-function showGameOverOverlay() {
-  if (!exists(overlayGO)) return;
-  overlayGO.classList.remove('hidden');
-  overlayGO.style.display = '';
-  overlayGO.setAttribute('aria-hidden', 'false');
-
-  if (exists(mobileNav)) {
-    mobileNav.classList.add('hidden');
-    mobileNav.setAttribute('aria-hidden', 'true');
-  }
-  if (exists(goMsg)) goMsg.textContent = `Игра окончена. Ваш счёт: ${pts}`;
-}
-
-function checkGameOver() {
-  if (isOver) return;
-  if (hasMoves()) return;
-  isOver = true;
-  showGameOverOverlay();
-}
-
-/* ====== Начало новой игры (сброс состояния) ====== */
-function startNew(resetHistory = true) {
-  if (isOver) autoSaveLeaderIfNeeded();
-
-  overlayGO?.classList.add('hidden');
-  leadersModal?.classList.add('hidden');
-
-  makeEmptyField();
-  const startCount = S_MIN + Math.floor(Math.random() * (S_MAX - S_MIN + 1));
-  const initial = addRandom(startCount);
-
-  pts = 0;
-  hist = [];
-  isOver = false;
-  leaderSaved = false;
-  if (exists(nameInput)) nameInput.value = '';
-  savedNote?.classList.add('hidden');
-
-  renderTiles(undefined, initial);
-  if (resetHistory) persistState();
-  showMobileControlsAdaptive();
-}
-
-/* ====== События / привязки ====== */
-function attachEvents() {
-  if (exists(document)) document.addEventListener('keydown', onKey);
-  if (exists(undoBtn)) undoBtn.addEventListener('click', undo);
-
-  const top = document.querySelector('.hdr-bar');
-  if (top) { top.style.position = 'relative'; top.style.zIndex = '1000'; }
-
-  if (exists(newBtn)) {
-    newBtn.addEventListener('click', () => { if (isOver) autoSaveLeaderIfNeeded(); overlayGO?.classList.add('hidden'); leadersModal?.classList.add('hidden'); startNew(true); }, { capture: true });
-    newBtn.addEventListener('pointerdown', () => { if (isOver) autoSaveLeaderIfNeeded(); overlayGO?.classList.add('hidden'); leadersModal?.classList.add('hidden'); startNew(true); });
-  }
-
-  if (exists(leadersBtn)) leadersBtn.addEventListener('click', () => { refreshLeadersUI(); leadersModal?.classList.remove('hidden'); mobileNav?.classList.add('hidden'); });
-
-  if (exists(restartBtn)) {
-    restartBtn.addEventListener('click', () => { if (isOver) autoSaveLeaderIfNeeded(); overlayGO?.classList.add('hidden'); startNew(true); });
-    restartBtn.addEventListener('pointerdown', () => { if (isOver) autoSaveLeaderIfNeeded(); overlayGO?.classList.add('hidden'); startNew(true); });
-  }
-
-  if (exists(closeLeadersBtn)) closeLeadersBtn.addEventListener('click', () => leadersModal?.classList.add('hidden'));
-  if (exists(clearLeadersBtn)) clearLeadersBtn.addEventListener('click', clearLeaders);
-
-  initMobileBtns();
-  window.addEventListener('resize', showMobileControlsAdaptive);
-
-  if (exists(wrap)) {
-    wrap.addEventListener('touchstart', onTouchStart, { passive: true });
-    wrap.addEventListener('touchend', onTouchEnd, { passive: true });
-    wrap.addEventListener('pointerdown', onPointerDown);
-    wrap.addEventListener('pointerup', onPointerUp);
-  }
-
-  if (exists(overlayGO)) {
-    overlayGO.addEventListener('click', ev => { if (ev.target === overlayGO) overlayGO.classList.add('hidden'); });
-  }
-
-  if (exists(leadersModal)) {
-    leadersModal.addEventListener('click', ev => { if (ev.target === leadersModal) leadersModal.classList.add('hidden'); });
-  }
-
-  if (exists(nameInput)) {
-    nameInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        autoSaveLeaderIfNeeded();
-        savedNote?.classList.remove('hidden');
+    var wrap = this.gridNode.querySelector('.tile-container');
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.className = 'tile-container';
+      this.gridNode.appendChild(wrap);
+    } else {
+      while (wrap.firstChild) {
+        wrap.removeChild(wrap.firstChild);
       }
+    }
+  };
+
+  Game.prototype.getEmpty = function () {
+    var res = [];
+    for (var r = 0; r < this.N; r++) {
+      for (var c = 0; c < this.N; c++) {
+        if (this.field[r][c] === 0) {
+          res.push({ r: r, c: c });
+        }
+      }
+    }
+    return res;
+  };
+
+  Game.prototype.addRandom = function (count) {
+    var empty = this.getEmpty();
+    if (!empty.length) {
+      return [];
+    }
+    var toAdd = count;
+    if (toAdd > empty.length) {
+      toAdd = empty.length;
+    }
+    var added = [];
+    for (var i = 0; i < toAdd; i++) {
+      var idx = Math.floor(Math.random() * empty.length);
+      var pos = empty.splice(idx, 1)[0];
+      var rr = Math.random();
+      if (rr < 0.9) {
+        this.field[pos.r][pos.c] = 2;
+      } else {
+        this.field[pos.r][pos.c] = 4;
+      }
+      added.push({ r: pos.r, c: pos.c });
+    }
+    return added;
+  };
+
+  Game.prototype.compressLine = function (arr) {
+    var a = [];
+    for (var i = 0; i < arr.length; i++) {
+      if (arr[i] !== 0) {
+        a.push(arr[i]);
+      }
+    }
+    while (a.length < this.N) {
+      a.push(0);
+    }
+    return a;
+  };
+
+  Game.prototype.mergeLine = function (line) {
+    var gained = 0;
+    var arr = this.compressLine(line);
+    var cont = true;
+    while (cont) {
+      cont = false;
+      for (var i = 0; i < this.N - 1; i++) {
+        if (arr[i] !== 0 && arr[i] === arr[i + 1]) {
+          arr[i] = arr[i] * 2;
+          arr[i + 1] = 0;
+          gained += arr[i];
+          cont = true;
+        }
+      }
+      if (cont) {
+        arr = this.compressLine(arr);
+      }
+    }
+    return { arr: arr, gained: gained };
+  };
+
+  Game.prototype.eqArr = function (a, b) {
+    if (a.length !== b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] !== b[i]) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  Game.prototype.moveLeft = function () {
+    var moved = false;
+    var gained = 0;
+    for (var r = 0; r < this.N; r++) {
+      var old = this.field[r].slice();
+      var res = this.mergeLine(old.slice());
+      this.field[r] = res.arr;
+      if (!this.eqArr(old, this.field[r])) {
+        moved = true;
+      }
+      gained += res.gained;
+    }
+    return { moved: moved, gained: gained };
+  };
+
+  Game.prototype.moveRight = function () {
+    var moved = false;
+    var gained = 0;
+    for (var r = 0; r < this.N; r++) {
+      var old = this.field[r].slice();
+      var rev = old.slice().reverse();
+      var res = this.mergeLine(rev);
+      this.field[r] = res.arr.reverse();
+      if (!this.eqArr(old, this.field[r])) {
+        moved = true;
+      }
+      gained += res.gained;
+    }
+    return { moved: moved, gained: gained };
+  };
+
+  Game.prototype.moveUp = function () {
+    var moved = false;
+    var gained = 0;
+    for (var c = 0; c < this.N; c++) {
+      var col = [];
+      for (var rr = 0; rr < this.N; rr++) {
+        col.push(this.field[rr][c]);
+      }
+      var res = this.mergeLine(col);
+      for (var r2 = 0; r2 < this.N; r2++) {
+        this.field[r2][c] = res.arr[r2];
+      }
+      if (!this.eqArr(col, res.arr)) {
+        moved = true;
+      }
+      gained += res.gained;
+    }
+    return { moved: moved, gained: gained };
+  };
+
+  Game.prototype.moveDown = function () {
+    var moved = false;
+    var gained = 0;
+    for (var c = 0; c < this.N; c++) {
+      var col = [];
+      for (var rr2 = 0; rr2 < this.N; rr2++) {
+        col.push(this.field[rr2][c]);
+      }
+      var rev = col.slice().reverse();
+      var res = this.mergeLine(rev);
+      var fin = res.arr.reverse();
+      for (var r3 = 0; r3 < this.N; r3++) {
+        this.field[r3][c] = fin[r3];
+      }
+      if (!this.eqArr(col, fin)) {
+        moved = true;
+      }
+      gained += res.gained;
+    }
+    return { moved: moved, gained: gained };
+  };
+
+  Game.prototype.render = function (passed, added) {
+    if (typeof added === 'undefined' || added === null) {
+      added = [];
+    }
+    var wrap = this.gridNode.querySelector('.tile-container');
+    if (!wrap) {
+      return;
+    }
+    var tiles;
+    if (Array.isArray(passed)) {
+      tiles = passed;
+    } else {
+      tiles = [];
+      for (var r = 0; r < this.N; r++) {
+        for (var c = 0; c < this.N; c++) {
+          var v = this.field[r][c];
+          if (v !== 0) {
+            var isNew = false;
+            for (var k = 0; k < added.length; k++) {
+              if (added[k].r === r && added[k].c === c) {
+                isNew = true;
+                break;
+              }
+            }
+            tiles.push({ v: v, r: r, c: c, isNew: isNew, merged: false });
+          }
+        }
+      }
+    }
+
+    while (wrap.firstChild) {
+      wrap.removeChild(wrap.firstChild);
+    }
+
+    var cell = this.gridNode.querySelector('.cell');
+    var gStyle = getComputedStyle(this.gridNode);
+    var gap = parseFloat(gStyle.getPropertyValue('gap'));
+    if (isNaN(gap)) {
+      gap = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--gap')) || 0;
+    }
+    var padLeft = parseFloat(gStyle.paddingLeft) || 0;
+    var padTop = parseFloat(gStyle.paddingTop) || 0;
+    var w = cell ? cell.getBoundingClientRect().width : (parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--tile-size')) || 88);
+    var h = cell ? cell.getBoundingClientRect().height : w;
+    var stepX = w + gap;
+    var stepY = h + gap;
+
+    for (var tI = 0; tI < tiles.length; tI++) {
+      (function () {
+        var t = tiles[tI];
+        var el = document.createElement('div');
+        el.className = 'tile tile-' + t.v;
+        var inner = document.createElement('div');
+        inner.className = 'tile-inner';
+        inner.textContent = t.v;
+        el.appendChild(inner);
+        el.style.position = 'absolute';
+        el.style.left = padLeft + t.c * stepX + 'px';
+        el.style.top = padTop + t.r * stepY + 'px';
+        el.style.width = w + 'px';
+        el.style.height = h + 'px';
+        el.style.transform = 'translate(0,0)';
+        if (t.isNew) {
+          el.classList.add('tile-new');
+        }
+        if (t.merged) {
+          el.classList.add('tile-merged');
+        }
+        if (this.lastWasMove && this.lastDir && !t.isNew && !t.merged) {
+          if (this.lastDir === 'left') {
+            el.style.transform = 'translateX(' + stepX + 'px)';
+          } else if (this.lastDir === 'right') {
+            el.style.transform = 'translateX(' + (-stepX) + 'px)';
+          } else if (this.lastDir === 'up') {
+            el.style.transform = 'translateY(' + stepY + 'px)';
+          } else if (this.lastDir === 'down') {
+            el.style.transform = 'translateY(' + (-stepY) + 'px)';
+          }
+          requestAnimationFrame(function () {
+            requestAnimationFrame(function () {
+              el.style.transform = 'translate(0,0)';
+            });
+          });
+        }
+        el.addEventListener('animationend', function () {
+          el.classList.remove('tile-new');
+          el.classList.remove('tile-merged');
+        });
+        wrap.appendChild(el);
+      }).call(this);
+    }
+
+    if (this.exists(this.scoreNode)) {
+      this.scoreNode.textContent = String(this.pts || 0);
+    }
+    if (this.exists(this.bestNode)) {
+      this.bestNode.textContent = String(this.best || 0);
+    }
+  };
+
+  Game.prototype.doMove = function (dir) {
+    if (this.over) {
+      return;
+    }
+    try {
+      this.hist.push({ field: this.cloneField(this.field), pts: this.pts });
+    } catch (e) { }
+    if (this.hist.length > this.MAX_H) {
+      this.hist.shift();
+    }
+
+    var res;
+    if (dir === 'left') {
+      res = this.moveLeft();
+    } else if (dir === 'right') {
+      res = this.moveRight();
+    } else if (dir === 'up') {
+      res = this.moveUp();
+    } else if (dir === 'down') {
+      res = this.moveDown();
+    } else {
+      return;
+    }
+
+    this.lastDir = dir;
+    this.lastWasMove = !!res.moved;
+
+    if (!res.moved) {
+      this.hist.pop();
+      this.checkOver();
+      this.lastDir = null;
+      this.lastWasMove = false;
+      return;
+    }
+
+    this.pts += res.gained;
+
+    var toAdd = Math.floor(Math.random() * (this.ADD_MAX - this.ADD_MIN + 1)) + this.ADD_MIN;
+    var added = this.addRandom(toAdd);
+
+    if (this.pts > this.best) {
+      this.best = this.pts;
+      try {
+        localStorage.setItem('bestScore', String(this.best));
+      } catch (e) { }
+    }
+
+    this.persist();
+    this.render(null, added);
+    this.checkOver();
+
+    var self = this;
+    setTimeout(function () {
+      self.lastDir = null;
+      self.lastWasMove = false;
+    }, 300);
+  };
+
+  Game.prototype.onKey = function (e) {
+    if (this.over) {
+      return;
+    }
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      this.doMove('left');
+      return;
+    }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      this.doMove('right');
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      this.doMove('up');
+      return;
+    }
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      this.doMove('down');
+      return;
+    }
+  };
+
+  Game.prototype.undoAction = function () {
+    if (this.over) {
+      return;
+    }
+    var prev = this.hist.pop();
+    if (!prev) {
+      return;
+    }
+    this.field = this.cloneField(prev.field);
+    this.pts = prev.pts;
+
+    var allPts = [];
+    var i;
+    for (i = 0; i < this.hist.length; i++) {
+      if (typeof this.hist[i].pts === 'number') {
+        allPts.push(this.hist[i].pts);
+      }
+    }
+    if (typeof this.pts === 'number') {
+      allPts.push(this.pts);
+    }
+
+    var recalc;
+    if (allPts.length > 0) {
+      recalc = allPts[0];
+      for (i = 1; i < allPts.length; i++) {
+        if (allPts[i] > recalc) {
+          recalc = allPts[i];
+        }
+      }
+    } else {
+      recalc = this.pts;
+    }
+
+    if (this.best !== recalc) {
+      this.best = recalc;
+      try {
+        localStorage.setItem('bestScore', String(this.best));
+      } catch (e) { }
+    }
+
+    this.render();
+    if (this.exists(this.bestNode)) {
+      this.bestNode.textContent = String(this.best);
+    }
+    this.persist();
+  };
+
+  Game.prototype.hasMoves = function () {
+    for (var r = 0; r < this.N; r++) {
+      for (var c = 0; c < this.N; c++) {
+        var v = this.field[r][c];
+        if (v === 0) {
+          return true;
+        }
+        if (c + 1 < this.N && this.field[r][c + 1] === v) {
+          return true;
+        }
+        if (r + 1 < this.N && this.field[r + 1][c] === v) {
+          return true;
+        }
+      }
+    }
+    return false;
+  };
+
+  Game.prototype.saveLeader = function (name) {
+    try {
+      var raw = localStorage.getItem('leaders') || '[]';
+      var arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) {
+        arr = [];
+      }
+      arr.push({ name: name || 'Аноним', score: this.pts, date: new Date().toLocaleString() });
+      arr.sort(function (a, b) {
+        if (a.score < b.score) return 1;
+        if (a.score > b.score) return -1;
+        return 0;
+      });
+      if (arr.length > 10) {
+        arr = arr.slice(0, 10);
+      }
+      localStorage.setItem('leaders', JSON.stringify(arr));
+      this.refreshLeaders();
+      if (this.exists(this.savedNote)) {
+        this.savedNote.classList.remove('hidden');
+      }
+    } catch (e) { }
+  };
+
+  Game.prototype.autoSaveLeader = function () {
+    if (this.leaderSaved) {
+      return;
+    }
+    var nm = '';
+    if (this.nameInput && this.nameInput.value) {
+      nm = this.nameInput.value.trim();
+    } else {
+      nm = '';
+    }
+    this.saveLeader(nm || 'Аноним');
+    this.leaderSaved = true;
+  };
+
+  Game.prototype.refreshLeaders = function () {
+    if (!this.exists(this.leadersBody)) {
+      return;
+    }
+    while (this.leadersBody.firstChild) {
+      this.leadersBody.removeChild(this.leadersBody.firstChild);
+    }
+    try {
+      var arr2 = JSON.parse(localStorage.getItem('leaders') || '[]') || [];
+      for (var i2 = 0; i2 < arr2.length; i2++) {
+        var it = arr2[i2];
+        var tr = document.createElement('tr');
+        var td1 = document.createElement('td');
+        td1.textContent = String(i2 + 1);
+        tr.appendChild(td1);
+        var td2 = document.createElement('td');
+        td2.textContent = it.name;
+        tr.appendChild(td2);
+        var td3 = document.createElement('td');
+        td3.textContent = String(it.score);
+        tr.appendChild(td3);
+        var td4 = document.createElement('td');
+        td4.textContent = it.date;
+        tr.appendChild(td4);
+        this.leadersBody.appendChild(tr);
+      }
+    } catch (e) { }
+  };
+
+  Game.prototype.clearLeaders = function () {
+    try {
+      localStorage.removeItem('leaders');
+    } catch (e) { }
+    this.refreshLeaders();
+  };
+
+  Game.prototype.showMobileIfNeeded = function () {
+    if (!this.exists(this.mobileNav)) {
+      return;
+    }
+    var mq = window.matchMedia('(max-width:520px)').matches;
+    if (mq && !this.over) {
+      this.mobileNav.classList.remove('hidden');
+      this.mobileNav.setAttribute('aria-hidden', 'false');
+    } else {
+      this.mobileNav.classList.add('hidden');
+      this.mobileNav.setAttribute('aria-hidden', 'true');
+    }
+  };
+
+  Game.prototype.initMobileBtns = function () {
+    if (!this.exists(this.mobileNav)) {
+      return;
+    }
+    var self = this;
+    this.mobileNav.addEventListener('click', function (ev) {
+      var target = ev.target;
+      while (target && target !== self.mobileNav && (!target.hasAttribute || !target.hasAttribute('data-dir'))) {
+        target = target.parentNode;
+      }
+      if (!target || target === self.mobileNav) {
+        return;
+      }
+      var dir = target.getAttribute('data-dir');
+      self.doMove(dir);
     });
-  }
-}
+  };
 
-/* ====== Запуск (boot) ====== */
-function boot() {
-  buildGridDOM();
-  attachEvents();
-  loadBestScore();
-  showMobileControlsAdaptive();
+  Game.prototype.onTouchStart = function (e) {
+    var t = e.touches ? e.touches[0] : e;
+    this.tStartX = t.clientX;
+    this.tStartY = t.clientY;
+  };
 
-  const loaded = loadState();
-  if (!loaded || !validField(field)) {
-    startNew(true);
-  } else {
-    renderTiles();
-    isOver = !hasMoves();
-    if (isOver) showGameOverOverlay();
-  }
-}
+  Game.prototype.onTouchEnd = function (e) {
+    var t = (e.changedTouches && e.changedTouches[0]) || e;
+    var dx = t.clientX - this.tStartX;
+    var dy = t.clientY - this.tStartY;
+    var ax = Math.abs(dx);
+    var ay = Math.abs(dy);
+    if (Math.max(ax, ay) < 20) {
+      return;
+    }
+    if (ax > ay) {
+      if (dx > 0) {
+        this.doMove('right');
+      } else {
+        this.doMove('left');
+      }
+    } else {
+      if (dy > 0) {
+        this.doMove('down');
+      } else {
+        this.doMove('up');
+      }
+    }
+  };
 
-/* старт */
-boot();
+  Game.prototype.onPointerDown = function (e) {
+    this.pStartX = e.clientX;
+    this.pStartY = e.clientY;
+    try {
+      if (this.wrap && this.wrap.setPointerCapture) {
+        this.wrap.setPointerCapture(e.pointerId);
+      }
+    } catch (err) { }
+  };
+
+  Game.prototype.onPointerUp = function (e) {
+    if (this.pStartX === null) {
+      return;
+    }
+    var dx = e.clientX - this.pStartX;
+    var dy = e.clientY - this.pStartY;
+    this.pStartX = null;
+    this.pStartY = null;
+    var ax = Math.abs(dx);
+    var ay = Math.abs(dy);
+    if (Math.max(ax, ay) < 10) {
+      return;
+    }
+    if (ax > ay) {
+      if (dx > 0) {
+        this.doMove('right');
+      } else {
+        this.doMove('left');
+      }
+    } else {
+      if (dy > 0) {
+        this.doMove('down');
+      } else {
+        this.doMove('up');
+      }
+    }
+  };
+
+  Game.prototype.showGameOver = function () {
+    if (!this.exists(this.overlayGO)) {
+      return;
+    }
+    this.overlayGO.classList.remove('hidden');
+    this.overlayGO.style.display = '';
+    this.overlayGO.setAttribute('aria-hidden', 'false');
+    if (this.exists(this.mobileNav)) {
+      this.mobileNav.classList.add('hidden');
+      this.mobileNav.setAttribute('aria-hidden', 'true');
+    }
+    if (this.exists(this.goMsg)) {
+      this.goMsg.textContent = 'Игра окончена. Ваш счёт: ' + this.pts;
+    }
+  };
+
+  Game.prototype.checkOver = function () {
+    if (this.over) {
+      return;
+    }
+    if (this.hasMoves()) {
+      return;
+    }
+    this.over = true;
+    this.showGameOver();
+  };
+
+  Game.prototype.startNew = function (resetHistory) {
+    if (typeof resetHistory === 'undefined') {
+      resetHistory = true;
+    }
+    if (this.over) {
+      this.autoSaveLeader();
+    }
+    if (this.overlayGO) {
+      this.overlayGO.classList.add('hidden');
+    }
+    if (this.leadersModal) {
+      this.leadersModal.classList.add('hidden');
+    }
+    this.field = [];
+    for (var r = 0; r < this.N; r++) {
+      var row = [];
+      for (var c = 0; c < this.N; c++) {
+        row.push(0);
+      }
+      this.field.push(row);
+    }
+    var diff = this.START_MAX - this.START_MIN + 1;
+    var rand = Math.floor(Math.random() * diff);
+    var startCount = this.START_MIN + rand;
+    var initial = this.addRandom(startCount);
+    this.pts = 0;
+    this.hist = [];
+    this.over = false;
+    this.leaderSaved = false;
+    if (this.exists(this.nameInput)) {
+      this.nameInput.value = '';
+    }
+    if (this.savedNote) {
+      this.savedNote.classList.add('hidden');
+    }
+    this.render(null, initial);
+    if (resetHistory) {
+      this.persist();
+    }
+    this.showMobileIfNeeded();
+  };
+
+  Game.prototype.attach = function () {
+    if (this.exists(document)) {
+      document.addEventListener('keydown', this.onKey);
+    }
+    if (this.exists(this.undoBtn)) {
+      this.undoBtn.addEventListener('click', this.undoAction);
+    }
+    var top = document.querySelector('.hdr-bar');
+    if (top) {
+      top.style.position = 'relative';
+      top.style.zIndex = '1000';
+    }
+    var self = this;
+    if (this.exists(this.newBtn)) {
+      this.newBtn.addEventListener('click', function () {
+        if (self.over) {
+          self.autoSaveLeader();
+        }
+        if (self.overlayGO) {
+          self.overlayGO.classList.add('hidden');
+        }
+        if (self.leadersModal) {
+          self.leadersModal.classList.add('hidden');
+        }
+        self.startNew(true);
+      }, true);
+      this.newBtn.addEventListener('pointerdown', function () {
+        if (self.over) {
+          self.autoSaveLeader();
+        }
+        if (self.overlayGO) {
+          self.overlayGO.classList.add('hidden');
+        }
+        if (self.leadersModal) {
+          self.leadersModal.classList.add('hidden');
+        }
+        self.startNew(true);
+      });
+    }
+    if (this.exists(this.leadersBtn)) {
+      this.leadersBtn.addEventListener('click', function () {
+        self.refreshLeaders();
+        if (self.leadersModal) {
+          self.leadersModal.classList.remove('hidden');
+        }
+        if (self.mobileNav) {
+          self.mobileNav.classList.add('hidden');
+        }
+      });
+    }
+    if (this.exists(this.restartBtn)) {
+      this.restartBtn.addEventListener('click', function () {
+        if (self.over) {
+          self.autoSaveLeader();
+        }
+        if (self.overlayGO) {
+          self.overlayGO.classList.add('hidden');
+        }
+        self.startNew(true);
+      });
+      this.restartBtn.addEventListener('pointerdown', function () {
+        if (self.over) {
+          self.autoSaveLeader();
+        }
+        if (self.overlayGO) {
+          self.overlayGO.classList.add('hidden');
+        }
+        self.startNew(true);
+      });
+    }
+    if (this.exists(this.closeLeadersBtn)) {
+      this.closeLeadersBtn.addEventListener('click', function () {
+        if (self.leadersModal) {
+          self.leadersModal.classList.add('hidden');
+        }
+      });
+    }
+    if (this.exists(this.clearLeadersBtn)) {
+      this.clearLeadersBtn.addEventListener('click', function () {
+        self.clearLeaders();
+      });
+    }
+    this.initMobileBtns();
+    window.addEventListener('resize', function () {
+      self.showMobileIfNeeded();
+    });
+    if (this.exists(this.wrap)) {
+      this.wrap.addEventListener('touchstart', this.onTouchStart, { passive: true });
+      this.wrap.addEventListener('touchend', this.onTouchEnd, { passive: true });
+      this.wrap.addEventListener('pointerdown', this.onPointerDown);
+      this.wrap.addEventListener('pointerup', this.onPointerUp);
+    }
+    if (this.exists(this.overlayGO)) {
+      this.overlayGO.addEventListener('click', function (ev) {
+        if (ev.target === self.overlayGO) {
+          self.overlayGO.classList.add('hidden');
+        }
+      });
+    }
+    if (this.exists(this.leadersModal)) {
+      this.leadersModal.addEventListener('click', function (ev) {
+        if (ev.target === self.leadersModal) {
+          self.leadersModal.classList.add('hidden');
+        }
+      });
+    }
+    if (this.exists(this.nameInput)) {
+      this.nameInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          self.autoSaveLeader();
+          if (self.savedNote) {
+            self.savedNote.classList.remove('hidden');
+          }
+        }
+      });
+    }
+  };
+
+  Game.prototype.boot = function () {
+    this.buildGrid();
+    this.attach();
+    this.loadBest();
+    this.showMobileIfNeeded();
+    var loaded = this.load();
+    if (!loaded || !this.validField(this.field)) {
+      this.startNew(true);
+    } else {
+      this.render();
+      this.over = !this.hasMoves();
+      if (this.over) {
+        this.showGameOver();
+      }
+    }
+  };
+
+  var game = new Game();
+  game.boot();
+})();
