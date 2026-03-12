@@ -1,8 +1,8 @@
 :root{
-  --bg:#faf8ef;
-  --board:#bbada0;
-  --cell:#cdc1b4;
-  --text-dark:#776e65;
+  --bg:#fbf9f2;
+  --board:#bfae98;
+  --cell:#d4c9bb;
+  --text-dark:#5b4f45;
   --tile-size:88px; 
   --gap:12px;
 }
@@ -20,20 +20,18 @@ body{
   padding:18px;
 }
 
+.hdr-bar{width:100%;max-width:760px}
+.app-title{margin:0 0 8px;font-size:28px}
+.top-controls{display:flex;gap:12px;align-items:center;justify-content:space-between}
+.score-bl{background:#f0efee; padding:8px 12px;border-radius:8px;text-align:center}
+.score-bl > .val{font-weight:700;font-size:18px}
+.btns button{margin-left:6px;padding:6px 10px;border-radius:6px;border:1px solid #ccc;background:white;cursor:pointer}
 
-.topbar{width:100%;max-width:760px}
-.topbar h1{margin:0 0 8px;font-size:28px}
-.controls-row{display:flex;gap:12px;align-items:center;justify-content:space-between}
-.scorebox{background:#eee; padding:8px 12px;border-radius:8px;text-align:center}
-.scorebox > div:last-child{font-weight:700;font-size:18px}
-.buttons button{margin-left:6px;padding:6px 10px;border-radius:6px;border:1px solid #ccc;background:white;cursor:pointer}
-
-
-#board-wrap{margin-top:12px; position:relative}
+.wrap-board{margin-top:12px; position:relative}
 
 .grid {
   position: relative;
-  overflow: hidden; /* <- важная правка */
+  overflow: hidden;
   display:grid;
   grid-template-columns:repeat(4, var(--tile-size));
   grid-template-rows:repeat(4, var(--tile-size));
@@ -44,7 +42,7 @@ body{
   box-shadow: 0 6px 10px rgba(0,0,0,0.08);
 }
 
-.cell {
+.grid .cell {
   width:var(--tile-size);
   height:var(--tile-size);
   background:var(--cell);
@@ -56,9 +54,7 @@ body{
   font-size:20px;
   color:var(--text-dark);
   position:relative;
-  overflow:visible;
 }
-
 
 .tile {
   position:absolute;
@@ -71,8 +67,8 @@ body{
   transition: transform 160ms ease, opacity 120ms ease;
   will-change: transform, opacity;
   font-size:20px;
+  box-sizing:border-box;
 }
-
 
 .tile-2{ background:#eee4da; color:#776e65; }
 .tile-4{ background:#ede0c8; color:#776e65; }
@@ -86,7 +82,6 @@ body{
 .tile-1024{ background:#edc53f; color:#f9f6f2; font-size:13px; }
 .tile-2048{ background:#edc22e; color:#f9f6f2; font-size:13px; }
 
-
 .overlay{
   position:fixed;
   left:0;right:0;top:0;bottom:0;
@@ -95,13 +90,12 @@ body{
   z-index:90;
 }
 .overlay.hidden{display:none}
-.overlay-inner{
+.box{
   background:white;padding:18px;border-radius:10px;min-width:280px;max-width:92%;
   box-shadow:0 8px 20px rgba(0,0,0,0.25)
 }
-.overlay .overlay-actions{display:flex;gap:8px;justify-content:center;margin-top:12px}
-.saved-msg{color:green;margin-top:10px}
-
+.actions{display:flex;gap:8px;justify-content:center;margin-top:12px}
+.saved-note{color:green;margin-top:10px}
 .mobile-controls{
   position:fixed;left:50%;transform:translateX(-50%);
   bottom:18px; z-index:50; display:flex;flex-direction:column;gap:8px;align-items:center;
@@ -109,72 +103,36 @@ body{
 .mobile-controls .m-row{display:flex;gap:8px}
 .m-btn{width:54px;height:54px;border-radius:10px;border:1px solid #ccc;background:white;font-size:20px}
 
-
 .foot{margin-top:20px;color:#666;font-size:13px}
-
-
 @media (max-width:520px){
   :root{ --tile-size:64px; --gap:8px }
-  .topbar h1{font-size:20px}
-  .buttons button{padding:6px;border-radius:8px}
-  .scorebox > div:last-child{font-size:16px}
+  .app-title{font-size:20px}
+  .btns button{padding:6px;border-radius:8px}
+  .score-bl > .val{font-size:16px}
   .m-btn{width:50px;height:50px}
 }
-
 
 @media (min-width:900px){
   :root{ --tile-size:96px; --gap:14px }
 }
 
-
-.tile.new { transform: scale(0); animation: pop .12s forwards; }
-@keyframes pop { to { transform: scale(1); } }
-
-
-.tile-container {
-  position: absolute;
-  inset: 0;          
-  z-index: 5;
-  pointer-events: none;
-}
-
-.tile {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius:6px;
-  font-weight:700;
-  transition: transform 160ms ease, opacity 120ms ease;
-  will-change: transform, opacity;
-  font-size:20px;
-  box-sizing: border-box;
-  pointer-events: auto;
-}
-
-
-.tile-new {
-  animation: tile-pop 150ms ease;
-}
+.tile-new { animation: tile-pop 150ms ease; }
 @keyframes tile-pop {
   0% { transform: scale(.3); opacity: 0; }
   60% { transform: scale(1.08); opacity: 1; }
   100% { transform: scale(1); }
 }
-
-
-.tile-merged .tile-inner {
-  animation: merged-pop 160ms ease;
-}
+.tile-merged .tile-inner { animation: merged-pop 160ms ease; }
 @keyframes merged-pop {
   0% { transform: scale(1); }
   50% { transform: scale(1.12); }
   100% { transform: scale(1); }
 }
 
-.tile-inner {
-  font-weight: 700;
-  font-size: 1.2em;
-  transform-origin: center;
+.tile-container {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
   pointer-events: none;
 }
+.tile-inner { pointer-events: none; font-weight:700; font-size:1.2em; transform-origin:center; }
